@@ -175,6 +175,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
     setTimeout(() => {
       const mockResponse: LLMResponse = Math.random() > 0.2 ? {
         success: true,
+        exerciseCount: 3,
         sets: [
           {
             id: crypto.randomUUID(),
@@ -200,6 +201,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
         ]
       } : {
         success: false,
+        exerciseCount: 0,
         error: "Could not understand the workout details. Please try again with clearer instructions."
       };
 
