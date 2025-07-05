@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,12 +14,14 @@ interface VoiceRecorderProps {
   onClose: () => void;
 }
 
-const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onClose }) => {
+const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date(), onSave, onClose }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [exerciseSets, setExerciseSets] = useState<ExerciseSet[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
   
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -28,8 +29,61 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
   const audioContext = useRef<AudioContext | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
   const microphone = useRef<MediaStreamAudioSourceNode | null>(null);
+  const recognition = useRef<any>(null);
+
+  // OpenAI API configuration - Use import.meta.env for Vite
+  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || 'your-api-key-here';
+  const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+  // Valid muscle groups for mapping
+  const VALID_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Biceps', 'Triceps', 'Shoulders', 'Abs'];
 
   useEffect(() => {
+    // Initialize speech recognition
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (SpeechRecognition) {
+      recognition.current = new SpeechRecognition();
+      recognition.current.continuous = true;
+      recognition.current.interimResults = true;
+      recognition.current.lang = 'en-US';
+      
+      recognition.current.onresult = (event: any) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        // Process all results to get the complete transcript
+        for (let i = 0; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        // Only show final results + current interim
+        setTranscript(finalTranscript + (interimTranscript ? interimTranscript : ''));
+      };
+      
+      recognition.current.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          return;
+        }
+        setErrorMessage(`Speech recognition error: ${event.error}`);
+      };
+      
+      recognition.current.onstart = () => {
+        setIsTranscribing(true);
+        setTranscript('');
+      };
+      
+      recognition.current.onend = () => {
+        setIsTranscribing(false);
+      };
+    }
+    
     return () => {
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
@@ -39,6 +93,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
       }
       if (audioContext.current) {
         audioContext.current.close();
+      }
+      if (recognition.current) {
+        recognition.current.stop();
       }
     };
   }, []);
@@ -66,45 +123,51 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
   };
 
   const detectSilence = (stream: MediaStream) => {
-    audioContext.current = new AudioContext();
-    analyser.current = audioContext.current.createAnalyser();
-    microphone.current = audioContext.current.createMediaStreamSource(stream);
-    
-    microphone.current.connect(analyser.current);
-    analyser.current.fftSize = 512;
-    
-    const bufferLength = analyser.current.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const checkAudioLevel = () => {
-      analyser.current!.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
+    try {
+      audioContext.current = new AudioContext();
+      analyser.current = audioContext.current.createAnalyser();
+      microphone.current = audioContext.current.createMediaStreamSource(stream);
       
-      if (average < 20) { // Very low audio level threshold
-        if (!silenceTimeout.current) {
-          silenceTimeout.current = setTimeout(() => {
-            if (isRecording) {
-              stopRecording();
-              toast({
-                title: "Recording Stopped",
-                description: "No voice detected for 4 seconds.",
-              });
-            }
-          }, 4000); // 4 seconds of silence
-        }
-      } else {
-        if (silenceTimeout.current) {
-          clearTimeout(silenceTimeout.current);
-          silenceTimeout.current = null;
-        }
-      }
+      microphone.current.connect(analyser.current);
+      analyser.current.fftSize = 512;
       
-      if (isRecording) {
-        requestAnimationFrame(checkAudioLevel);
-      }
-    };
-    
-    checkAudioLevel();
+      const bufferLength = analyser.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      const checkAudioLevel = () => {
+        if (!analyser.current) return;
+        
+        analyser.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
+        
+        if (average < 20) {
+          if (!silenceTimeout.current) {
+            silenceTimeout.current = setTimeout(() => {
+              if (isRecording) {
+                stopRecording();
+                toast({
+                  title: "Recording Stopped",
+                  description: "No voice detected for 4 seconds.",
+                });
+              }
+            }, 4000);
+          }
+        } else {
+          if (silenceTimeout.current) {
+            clearTimeout(silenceTimeout.current);
+            silenceTimeout.current = null;
+          }
+        }
+        
+        if (isRecording) {
+          requestAnimationFrame(checkAudioLevel);
+        }
+      };
+      
+      checkAudioLevel();
+    } catch (error) {
+      console.error('Audio context error:', error);
+    }
   };
 
   const startRecording = async () => {
@@ -128,6 +191,16 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
       setIsRecording(true);
       setRecordingTime(0);
       setErrorMessage('');
+      setTranscript('');
+      
+      // Start speech recognition
+      if (recognition.current) {
+        try {
+          recognition.current.start();
+        } catch (error) {
+          console.error('Speech recognition start error:', error);
+        }
+      }
       
       // Start silence detection
       detectSilence(stream);
@@ -138,9 +211,10 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
       
       toast({
         title: "Recording Started",
-        description: "Voice will auto-stop after 4 seconds of silence.",
+        description: "Speak clearly. Recording will auto-stop after 4 seconds of silence.",
       });
     } catch (error) {
+      console.error('Recording error:', error);
       toast({
         title: "Recording Error",
         description: "Could not access microphone. Please check permissions.",
@@ -153,6 +227,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
     if (mediaRecorder.current && isRecording) {
       mediaRecorder.current.stop();
       setIsRecording(false);
+      
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
       }
@@ -160,68 +235,151 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
         clearTimeout(silenceTimeout.current);
         silenceTimeout.current = null;
       }
+      
+      // Stop speech recognition
+      if (recognition.current && isTranscribing) {
+        try {
+          recognition.current.stop();
+        } catch (error) {
+          console.error('Speech recognition stop error:', error);
+        }
+      }
+      
       toast({
         title: "Recording Stopped",
         description: "Processing your voice input...",
       });
-      simulateLLMProcessing();
+      
+      // Wait a bit for final speech recognition results
+      setTimeout(() => {
+        processWorkoutWithOpenAI();
+      }, 1000);
     }
   };
 
-  const simulateLLMProcessing = () => {
+  const processWorkoutWithOpenAI = async () => {
     setIsProcessing(true);
     setErrorMessage('');
     
-    setTimeout(() => {
-      const mockResponse: LLMResponse = Math.random() > 0.2 ? {
-        success: true,
-        exerciseCount: 3,
-        sets: [
-          {
-            id: crypto.randomUUID(),
-            exerciseName: "Bench Press",
-            muscleGroup: "Chest",
-            weight: "185 lbs",
-            reps: 8
-          },
-          {
-            id: crypto.randomUUID(),
-            exerciseName: "Bench Press",
-            muscleGroup: "Chest",
-            weight: "185 lbs",
-            reps: 6
-          },
-          {
-            id: crypto.randomUUID(),
-            exerciseName: "Shoulder Press",
-            muscleGroup: "Shoulders",
-            weight: "65 lbs",
-            reps: 10
-          }
-        ]
-      } : {
-        success: false,
-        exerciseCount: 0,
-        error: "Could not understand the workout details. Please try again with clearer instructions."
-      };
+    if (!transcript.trim()) {
+      setErrorMessage('No speech detected. Please try recording again.');
+      setIsProcessing(false);
+      return;
+    }
 
-      if (mockResponse.success && mockResponse.sets) {
-        setExerciseSets(mockResponse.sets);
+    try {
+      const prompt = `You are an expert fitness AI assistant. Your task is to extract structured workout data from user speech transcripts.
+
+IMPORTANT RULES:
+1. You must ONLY use these 7 muscle groups: Chest, Back, Legs, Biceps, Triceps, Shoulders, Abs
+2. Map all exercises to one of these muscle groups (be intelligent about mapping)
+3. Extract weight with units (lbs, kg, etc.)
+4. Extract number of reps as integer
+5. If multiple sets are mentioned, create separate entries for each set
+6. If information is unclear or missing, make reasonable assumptions based on context
+7. Return ONLY valid JSON, no additional text
+
+MUSCLE GROUP MAPPING EXAMPLES:
+- Bench Press, Push-ups, Chest Fly → Chest
+- Pull-ups, Rows, Lat Pulldown → Back
+- Squats, Lunges, Deadlifts, Leg Press → Legs
+- Curls, Hammer Curls → Biceps
+- Tricep Dips, Tricep Extensions → Triceps
+- Shoulder Press, Lateral Raises → Shoulders
+- Crunches, Planks, Sit-ups → Abs
+
+TRANSCRIPT TO ANALYZE:
+"${transcript}"
+
+Return a JSON object with this exact structure:
+{
+  "success": true,
+  "exerciseCount": number,
+  "sets": [
+    {
+      "id": "unique-id",
+      "exerciseName": "Exercise Name",
+      "muscleGroup": "One of the 7 valid muscle groups",
+      "weight": "weight with units",
+      "reps": number
+    }
+  ]
+}
+
+If you cannot extract any valid workout data, return:
+{
+  "success": false,
+  "exerciseCount": 0,
+  "error": "Brief explanation of why extraction failed"
+}`;
+
+      const response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a fitness AI that extracts workout data from speech. Always return valid JSON.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.3,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices[0]?.message?.content;
+      
+      if (!content) {
+        throw new Error('No response from OpenAI');
+      }
+
+      // Parse the JSON response
+      const workoutData = JSON.parse(content);
+      
+      // Validate the response structure
+      if (workoutData.success && workoutData.sets && Array.isArray(workoutData.sets)) {
+        // Add unique IDs if missing and validate muscle groups
+        const validatedSets = workoutData.sets.map((set: any) => ({
+          id: set.id || crypto.randomUUID(),
+          exerciseName: set.exerciseName || 'Unknown Exercise',
+          muscleGroup: VALID_MUSCLE_GROUPS.includes(set.muscleGroup) ? set.muscleGroup : 'Chest',
+          weight: set.weight || '0 lbs',
+          reps: typeof set.reps === 'number' ? set.reps : 0
+        }));
+
+        setExerciseSets(validatedSets);
         toast({
           title: "AI Analysis Complete!",
-          description: `Extracted ${mockResponse.sets.length} exercise sets.`,
+          description: `Extracted ${validatedSets.length} exercise sets from your workout.`,
         });
       } else {
-        setErrorMessage(mockResponse.error || "Enter Valid query");
-        toast({
-          title: "Processing Error",
-          description: mockResponse.error || "Enter Valid query",
-          variant: "destructive",
-        });
+        throw new Error(workoutData.error || 'Invalid response format from AI');
       }
-      
+    } catch (error) {
+      console.error('OpenAI processing error:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to process workout data');
+      toast({
+        title: "Processing Error",
+        description: "Could not analyze your workout. Please try again or add exercises manually.",
+        variant: "destructive",
+      });
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
   const handleSave = () => {
@@ -248,8 +406,8 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
     }
 
     const workout = {
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      title: `Workout - ${format(selectedDate, 'MMM dd')}`,
+      date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+      title: `Workout - ${selectedDate ? format(selectedDate, 'MMM dd') : format(new Date(), 'MMM dd')}`,
       exerciseSets: validSets,
     };
 
@@ -262,6 +420,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
       addNewSet();
     }
   }, []);
+
+  // Check if speech recognition is supported
+  const isSpeechRecognitionSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -279,7 +440,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
             </Button>
           </div>
           <p className="text-purple-100 text-sm">
-            {format(selectedDate, "MMM dd, yyyy")}
+            {selectedDate ? format(selectedDate, "MMM dd, yyyy") : format(new Date(), "MMM dd, yyyy")}
           </p>
         </CardHeader>
         
@@ -292,6 +453,36 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate, onSave, onC
             onStopRecording={stopRecording}
             errorMessage={errorMessage}
           />
+
+          {/* Speech Recognition Status */}
+          {!isSpeechRecognitionSupported && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-yellow-800 text-sm">
+                Speech recognition not supported in this browser. Voice recording will work but text won't be transcribed.
+              </p>
+            </div>
+          )}
+
+          {/* API Key Warning */}
+          {OPENAI_API_KEY === 'your-api-key-here' && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-800 text-sm">
+                Please set your OpenAI API key in the environment variable VITE_OPENAI_API_KEY
+              </p>
+            </div>
+          )}
+
+          {/* Transcript Display */}
+          {(transcript || isTranscribing) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-800 mb-2">
+                {isTranscribing ? "Transcribing..." : "What you said:"}
+              </h4>
+              <p className="text-blue-700 text-sm whitespace-pre-wrap">
+                {transcript || (isTranscribing ? "Listening..." : "")}
+              </p>
+            </div>
+          )}
 
           <ExerciseSetForm
             exerciseSets={exerciseSets}
