@@ -17,6 +17,8 @@ export interface Workout {
 
 export interface LLMResponse {
   success: boolean;
+  exerciseCount: number;
   sets?: ExerciseSet[];
+  helpText?: string;
   error?: string;
 }

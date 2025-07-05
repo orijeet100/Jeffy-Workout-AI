@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,16 +30,48 @@ const Index = () => {
   }, [workouts]);
 
   const addWorkout = (workoutData: Omit<Workout, 'id' | 'timestamp'>) => {
-    const newWorkout: Workout = {
-      ...workoutData,
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-    };
-    setWorkouts(prev => [...prev, newWorkout]);
+    const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+    
+    // Check if there's already a workout for this date
+    const existingWorkoutIndex = workouts.findIndex(workout => workout.date === selectedDateString);
+    
+    if (existingWorkoutIndex !== -1) {
+      // Merge with existing workout, grouping by muscle group and exercise
+      const existingWorkout = workouts[existingWorkoutIndex];
+      const mergedSets = [...existingWorkout.exerciseSets, ...workoutData.exerciseSets];
+      
+      const updatedWorkout = {
+        ...existingWorkout,
+        exerciseSets: mergedSets
+      };
+      
+      setWorkouts(prev => prev.map((workout, index) => 
+        index === existingWorkoutIndex ? updatedWorkout : workout
+      ));
+    } else {
+      // Create new workout
+      const newWorkout: Workout = {
+        ...workoutData,
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+      };
+      setWorkouts(prev => [...prev, newWorkout]);
+    }
+    
     setShowAddWorkout(false);
     toast({
       title: "Workout Added!",
       description: "Your workout has been saved successfully.",
+    });
+  };
+
+  const updateWorkout = (updatedWorkout: Workout) => {
+    setWorkouts(prev => prev.map(workout => 
+      workout.id === updatedWorkout.id ? updatedWorkout : workout
+    ));
+    toast({
+      title: "Workout Updated!",
+      description: "Your changes have been saved.",
     });
   };
 
@@ -165,6 +196,7 @@ const Index = () => {
                     key={workout.id}
                     workout={workout}
                     onDelete={deleteWorkout}
+                    onUpdate={updateWorkout}
                   />
                 ))}
               </div>
