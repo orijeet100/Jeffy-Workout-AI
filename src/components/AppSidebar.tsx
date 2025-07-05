@@ -34,7 +34,7 @@ export function AppSidebar({ user, onLogout }: AppSidebarProps) {
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
 
   return (
-    <Sidebar className={state === "collapsed" ? "w-14" : "w-60"} collapsible>
+    <Sidebar className={state === "collapsed" ? "w-14" : "w-60"} collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
