@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,85 +7,32 @@ import { Plus, Calendar as CalendarIcon, Dumbbell } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { toast } from '@/hooks/use-toast';
 import WorkoutCard from '@/components/WorkoutCard';
 import VoiceRecorder from '@/components/VoiceRecorder';
-import { Workout } from '@/types/workout';
+import { useWorkouts } from '@/hooks/useWorkouts';
 
 const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
+  
+  const { workouts, isLoading, addWorkout, deleteWorkout, updateWorkout } = useWorkouts(selectedDate);
 
-  // Load workouts from localStorage on component mount
-  useEffect(() => {
-    const savedWorkouts = localStorage.getItem('workouts');
-    if (savedWorkouts) {
-      setWorkouts(JSON.parse(savedWorkouts));
-    }
-  }, []);
-
-  // Save workouts to localStorage whenever workouts change
-  useEffect(() => {
-    localStorage.setItem('workouts', JSON.stringify(workouts));
-  }, [workouts]);
-
-  const addWorkout = (workoutData: Omit<Workout, 'id' | 'timestamp'>) => {
+  const handleAddWorkout = (workoutData: any) => {
     const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-    
-    // Check if there's already a workout for this date
-    const existingWorkoutIndex = workouts.findIndex(workout => workout.date === selectedDateString);
-    
-    if (existingWorkoutIndex !== -1) {
-      // Merge with existing workout, grouping by muscle group and exercise
-      const existingWorkout = workouts[existingWorkoutIndex];
-      const mergedSets = [...existingWorkout.exerciseSets, ...workoutData.exerciseSets];
-      
-      const updatedWorkout = {
-        ...existingWorkout,
-        exerciseSets: mergedSets
-      };
-      
-      setWorkouts(prev => prev.map((workout, index) => 
-        index === existingWorkoutIndex ? updatedWorkout : workout
-      ));
-    } else {
-      // Create new workout
-      const newWorkout: Workout = {
-        ...workoutData,
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-      };
-      setWorkouts(prev => [...prev, newWorkout]);
-    }
-    
+    addWorkout({
+      ...workoutData,
+      date: selectedDateString
+    });
     setShowAddWorkout(false);
-    toast({
-      title: "Workout Added!",
-      description: "Your workout has been saved successfully.",
-    });
   };
 
-  const updateWorkout = (updatedWorkout: Workout) => {
-    setWorkouts(prev => prev.map(workout => 
-      workout.id === updatedWorkout.id ? updatedWorkout : workout
-    ));
-    toast({
-      title: "Workout Updated!",
-      description: "Your changes have been saved.",
-    });
-  };
-
-  const deleteWorkout = (id: string) => {
-    setWorkouts(prev => prev.filter(workout => workout.id !== id));
-    toast({
-      title: "Workout Deleted",
-      description: "Workout has been removed from your history.",
-    });
-  };
-
-  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-  const todaysWorkouts = workouts.filter(workout => workout.date === selectedDateString);
+  if (isLoading) {
+    return (
+      <div className="max-w-md mx-auto space-y-6">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -145,7 +92,7 @@ const Dashboard = () => {
       </div>
 
       {/* Today's Workouts */}
-      {todaysWorkouts.length === 0 ? (
+      {workouts.length === 0 ? (
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
           <CardContent className="text-center py-8 text-gray-500">
             <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -155,7 +102,7 @@ const Dashboard = () => {
         </Card>
       ) : (
         <div className="space-y-3">
-          {todaysWorkouts.map((workout) => (
+          {workouts.map((workout) => (
             <WorkoutCard
               key={workout.id}
               workout={workout}
@@ -170,7 +117,7 @@ const Dashboard = () => {
       {showAddWorkout && (
         <VoiceRecorder
           selectedDate={selectedDate}
-          onSave={addWorkout}
+          onSave={handleAddWorkout}
           onClose={() => setShowAddWorkout(false)}
         />
       )}
