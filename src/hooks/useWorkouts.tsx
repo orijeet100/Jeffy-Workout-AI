@@ -224,11 +224,92 @@ export const useWorkouts = () => {
     }
   });
 
+  // Update workout mutation
+  const updateWorkoutMutation = useMutation({
+    mutationFn: async (workout: any) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('workouts')
+        .update({
+          title: workout.title,
+          date: workout.date,
+        })
+        .eq('id', workout.id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating workout:', error);
+        throw error;
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workouts'] });
+    },
+    onError: (error) => {
+      console.error('Error updating workout:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update workout. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Delete workout mutation
+  const deleteWorkoutMutation = useMutation({
+    mutationFn: async (workoutId: string) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      // First delete all exercise sets for this workout
+      const { error: setsError } = await supabase
+        .from('exercise_sets')
+        .delete()
+        .eq('workout_id', workoutId);
+
+      if (setsError) {
+        console.error('Error deleting exercise sets:', setsError);
+        throw setsError;
+      }
+
+      // Then delete the workout
+      const { error: workoutError } = await supabase
+        .from('workouts')
+        .delete()
+        .eq('id', workoutId)
+        .eq('user_id', user.id);
+
+      if (workoutError) {
+        console.error('Error deleting workout:', workoutError);
+        throw workoutError;
+      }
+
+      return workoutId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workouts'] });
+    },
+    onError: (error) => {
+      console.error('Error deleting workout:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete workout. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
   return {
     workouts,
     isLoading,
     error,
     addWorkout: addWorkoutMutation.mutateAsync,
+    updateWorkout: updateWorkoutMutation.mutateAsync,
+    deleteWorkout: deleteWorkoutMutation.mutateAsync,
     isAddingWorkout: addWorkoutMutation.isPending,
   };
 };

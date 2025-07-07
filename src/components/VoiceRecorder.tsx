@@ -38,6 +38,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
   // Valid muscle groups for mapping
   const VALID_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Biceps', 'Triceps', 'Shoulders', 'Abs'];
 
+  // Check if speech recognition is supported
+  const isSpeechRecognitionSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+
   useEffect(() => {
     // Initialize speech recognition
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -98,6 +101,13 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
         recognition.current.stop();
       }
     };
+  }, []);
+
+  // Initialize with one empty set if none exist
+  useEffect(() => {
+    if (exerciseSets.length === 0) {
+      addNewSet();
+    }
   }, []);
 
   const createEmptySet = (): ExerciseSet => ({
@@ -403,6 +413,38 @@ If you cannot extract any valid workout data, return:
         description: `Found ${exerciseSets.length} exercise set(s) in your recording.`,
       });
     }
+  };
+
+  const handleSave = () => {
+    if (exerciseSets.length === 0) {
+      toast({
+        title: "No Exercise Sets",
+        description: "Please add at least one exercise set.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const validSets = exerciseSets.filter(set => 
+      set.exerciseName.trim() && set.muscleGroup.trim() && set.weight.trim() && set.reps > 0
+    );
+
+    if (validSets.length === 0) {
+      toast({
+        title: "Invalid Sets",
+        description: "Please fill in all required fields for at least one set.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const workout = {
+      date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+      title: `Workout - ${selectedDate ? format(selectedDate, 'MMM dd') : format(new Date(), 'MMM dd')}`,
+      exerciseSets: validSets,
+    };
+
+    onSave(workout);
   };
 
   return (
