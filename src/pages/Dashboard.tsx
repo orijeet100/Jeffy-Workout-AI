@@ -89,7 +89,7 @@ const Dashboard = () => {
     return workoutDate >= weekStart;
   }).length || 0;
 
-  const totalExercises = Object.values(exercises || {}).flat().length;
+  const totalExercises = exercises ? Object.values(exercises).flat().length : 0;
 
   if (workoutsLoading || exercisesLoading) {
     return (
@@ -98,6 +98,12 @@ const Dashboard = () => {
       </div>
     );
   }
+
+  // Transform workouts to include timestamp for WorkoutCard compatibility
+  const workoutsWithTimestamp = workouts?.map(workout => ({
+    ...workout,
+    timestamp: new Date(workout.created_at || workout.date).getTime()
+  })) || [];
 
   return (
     <div className="space-y-6">
@@ -222,9 +228,9 @@ const Dashboard = () => {
       {/* Recent Workouts */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent Workouts</h2>
-        {workouts && workouts.length > 0 ? (
+        {workoutsWithTimestamp && workoutsWithTimestamp.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workouts.slice(0, 6).map((workout) => (
+            {workoutsWithTimestamp.slice(0, 6).map((workout) => (
               <WorkoutCard key={workout.id} workout={workout} />
             ))}
           </div>

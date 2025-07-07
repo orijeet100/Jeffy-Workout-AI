@@ -8,14 +8,34 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface VoiceRecordingControlsProps {
   onWorkoutParsed: (workoutData: any) => void;
+  isRecording?: boolean;
+  isProcessing?: boolean;
+  recordingTime?: number;
+  onStartRecording?: () => Promise<void>;
+  onStopRecording?: () => void;
+  errorMessage?: string;
 }
 
-export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ onWorkoutParsed }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<string>('');
+export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
+  onWorkoutParsed,
+  isRecording: externalIsRecording,
+  isProcessing: externalIsProcessing,
+  recordingTime: externalRecordingTime,
+  onStartRecording: externalOnStartRecording,
+  onStopRecording: externalOnStopRecording,
+  errorMessage: externalErrorMessage
+}) => {
+  const [internalIsRecording, setInternalIsRecording] = useState(false);
+  const [internalIsPlaying, setInternalIsPlaying] = useState(false);
+  const [internalIsParsing, setInternalIsParsing] = useState(false);
+  const [internalAudioUrl, setInternalAudioUrl] = useState<string | null>(null);
+  const [internalTranscript, setInternalTranscript] = useState<string>('');
+  
+  // Use external props if provided, otherwise use internal state
+  const isRecording = externalIsRecording !== undefined ? externalIsRecording : internalIsRecording;
+  const isProcessing = externalIsProcessing !== undefined ? externalIsProcessing : internalIsParsing;
+  const recordingTime = externalRecordingTime || 0;
+  const errorMessage = externalErrorMessage || '';
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -26,7 +46,7 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
 
   useEffect(() => {
     // Initialize speech recognition if available
-    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (SpeechRecognitionClass) {
       recognitionRef.current = new SpeechRecognitionClass();
@@ -42,7 +62,7 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
           }
         }
         if (finalTranscript) {
-          setTranscript(prev => prev + ' ' + finalTranscript);
+          setInternalTranscript(prev => prev + ' ' + finalTranscript);
         }
       };
 
@@ -66,6 +86,11 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
   }, []);
 
   const startRecording = async () => {
+    if (externalOnStartRecording) {
+      await externalOnStartRecording();
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
@@ -81,7 +106,7 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
         const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
+        setInternalAudioUrl(url);
         
         // Stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
@@ -89,8 +114,8 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
       
       // Start recording
       mediaRecorderRef.current.start();
-      setIsRecording(true);
-      setTranscript('');
+      setInternalIsRecording(true);
+      setInternalTranscript('');
       
       // Start speech recognition
       if (recognitionRef.current) {
@@ -113,9 +138,14 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (externalOnStopRecording) {
+      externalOnStopRecording();
+      return;
+    }
+
+    if (mediaRecorderRef.current && internalIsRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
+      setInternalIsRecording(false);
       
       // Stop speech recognition
       if (recognitionRef.current) {
@@ -130,27 +160,27 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
   };
 
   const playRecording = () => {
-    if (audioUrl && !isPlaying) {
+    if (internalAudioUrl && !internalIsPlaying) {
       if (audioRef.current) {
         audioRef.current.pause();
       }
       
-      audioRef.current = new Audio(audioUrl);
-      audioRef.current.onended = () => setIsPlaying(false);
+      audioRef.current = new Audio(internalAudioUrl);
+      audioRef.current.onended = () => setInternalIsPlaying(false);
       audioRef.current.play();
-      setIsPlaying(true);
+      setInternalIsPlaying(true);
     }
   };
 
   const pausePlayback = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      setIsPlaying(false);
+      setInternalIsPlaying(false);
     }
   };
 
   const parseWorkout = async () => {
-    if (!transcript.trim()) {
+    if (!internalTranscript.trim()) {
       toast({
         title: "No Transcript",
         description: "Please record your workout first or the speech recognition didn't capture anything.",
@@ -159,12 +189,12 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
       return;
     }
 
-    setIsParsing(true);
+    setInternalIsParsing(true);
     
     try {
       const { data, error } = await supabase.functions.invoke('parse-workout', {
         body: {
-          transcript: transcript.trim(),
+          transcript: internalTranscript.trim(),
           exerciseKnowledge: exercises
         }
       });
@@ -187,8 +217,8 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
         });
         
         // Clear the recording after successful parsing
-        setAudioUrl(null);
-        setTranscript('');
+        setInternalAudioUrl(null);
+        setInternalTranscript('');
       } else {
         toast({
           title: "No Exercises Found",
@@ -204,7 +234,7 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
         variant: "destructive"
       });
     } finally {
-      setIsParsing(false);
+      setInternalIsParsing(false);
     }
   };
 
@@ -235,9 +265,9 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
           </Button>
         )}
         
-        {audioUrl && !isRecording && (
+        {internalAudioUrl && !isRecording && (
           <>
-            {!isPlaying ? (
+            {!internalIsPlaying ? (
               <Button
                 onClick={playRecording}
                 variant="outline"
@@ -261,11 +291,11 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
             
             <Button
               onClick={parseWorkout}
-              disabled={isParsing}
+              disabled={isProcessing}
               className="flex items-center gap-2"
               size="sm"
             >
-              {isParsing ? 'Parsing...' : 'Parse Workout'}
+              {isProcessing ? 'Parsing...' : 'Parse Workout'}
             </Button>
           </>
         )}
@@ -274,14 +304,20 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
       {isRecording && (
         <div className="flex items-center gap-2 text-red-600 mb-2">
           <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-          <span className="text-sm">Recording in progress...</span>
+          <span className="text-sm">Recording in progress... {recordingTime}s</span>
         </div>
       )}
 
-      {transcript && (
+      {errorMessage && (
+        <div className="mt-4 p-3 bg-red-50 rounded-lg">
+          <p className="text-sm text-red-600">{errorMessage}</p>
+        </div>
+      )}
+
+      {internalTranscript && (
         <div className="mt-4 p-3 bg-gray-50 rounded-lg">
           <p className="text-sm font-medium text-gray-700 mb-1">Transcript:</p>
-          <p className="text-sm text-gray-600">{transcript}</p>
+          <p className="text-sm text-gray-600">{internalTranscript}</p>
         </div>
       )}
       

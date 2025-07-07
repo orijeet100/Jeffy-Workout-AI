@@ -5,6 +5,8 @@ export interface ExerciseSet {
   muscleGroup: string;
   weight: string;
   reps: number;
+  duration_seconds?: number;
+  notes?: string;
 }
 
 export interface Workout {
@@ -13,6 +15,9 @@ export interface Workout {
   title: string;
   exerciseSets: ExerciseSet[];
   timestamp: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  user_id?: string;
 }
 
 export interface LLMResponse {
