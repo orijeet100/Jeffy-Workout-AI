@@ -31,10 +31,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
   const microphone = useRef<MediaStreamAudioSourceNode | null>(null);
   const recognition = useRef<any>(null);
 
-  // OpenAI API configuration - Use import.meta.env for Vite
-  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || 'your-api-key-here';
-  const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
+  // Proxy API configuration - Use your local proxy instead of direct OpenAI
+  const PROXY_API_URL = 'http://localhost:3001/api/process-workout'; // Replace with your proxy URL
+  
   // Valid muscle groups for mapping
   const VALID_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Biceps', 'Triceps', 'Shoulders', 'Abs'];
 
@@ -262,12 +261,12 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
       
       // Wait a bit for final speech recognition results
       setTimeout(() => {
-        processWorkoutWithOpenAI();
+        processWorkoutWithProxyAPI();
       }, 1000);
     }
   };
 
-  const processWorkoutWithOpenAI = async () => {
+  const processWorkoutWithProxyAPI = async () => {
     setIsProcessing(true);
     setErrorMessage('');
     
@@ -278,87 +277,22 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
     }
 
     try {
-      const prompt = `You are an expert fitness AI assistant. Your task is to extract structured workout data from user speech transcripts.
-
-IMPORTANT RULES:
-1. You must ONLY use these 7 muscle groups: Chest, Back, Legs, Biceps, Triceps, Shoulders, Abs
-2. Map all exercises to one of these muscle groups (be intelligent about mapping)
-3. Extract weight with units (lbs, kg, etc.)
-4. Extract number of reps as integer
-5. If multiple sets are mentioned, create separate entries for each set
-6. If information is unclear or missing, make reasonable assumptions based on context
-7. Return ONLY valid JSON, no additional text
-
-MUSCLE GROUP MAPPING EXAMPLES:
-- Bench Press, Push-ups, Chest Fly → Chest
-- Pull-ups, Rows, Lat Pulldown → Back
-- Squats, Lunges, Deadlifts, Leg Press → Legs
-- Curls, Hammer Curls → Biceps
-- Tricep Dips, Tricep Extensions → Triceps
-- Shoulder Press, Lateral Raises → Shoulders
-- Crunches, Planks, Sit-ups → Abs
-
-TRANSCRIPT TO ANALYZE:
-"${transcript}"
-
-Return a JSON object with this exact structure:
-{
-  "success": true,
-  "exerciseCount": number,
-  "sets": [
-    {
-      "id": "unique-id",
-      "exerciseName": "Exercise Name",
-      "muscleGroup": "One of the 7 valid muscle groups",
-      "weight": "weight with units",
-      "reps": number
-    }
-  ]
-}
-
-If you cannot extract any valid workout data, return:
-{
-  "success": false,
-  "exerciseCount": 0,
-  "error": "Brief explanation of why extraction failed"
-}`;
-
-      const response = await fetch(OPENAI_API_URL, {
+      const response = await fetch(PROXY_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a fitness AI that extracts workout data from speech. Always return valid JSON.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 1000,
-          temperature: 0.3,
+          transcript: transcript,
+          validMuscleGroups: VALID_MUSCLE_GROUPS
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`);
+        throw new Error(`Proxy API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content;
-      
-      if (!content) {
-        throw new Error('No response from OpenAI');
-      }
-
-      // Parse the JSON response
-      const workoutData = JSON.parse(content);
+      const workoutData = await response.json();
       
       // Validate the response structure
       if (workoutData.success && workoutData.sets && Array.isArray(workoutData.sets)) {
@@ -377,14 +311,14 @@ If you cannot extract any valid workout data, return:
           description: `Extracted ${validatedSets.length} exercise sets from your workout.`,
         });
       } else {
-        throw new Error(workoutData.error || 'Invalid response format from AI');
+        throw new Error(workoutData.error || 'Invalid response format from proxy API');
       }
     } catch (error) {
-      console.error('OpenAI processing error:', error);
+      console.error('Proxy API processing error:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to process workout data');
       toast({
         title: "Processing Error",
-        description: "Could not analyze your workout. Please try again or add exercises manually.",
+        description: "Could not analyze your workout. Please check your proxy API or add exercises manually.",
         variant: "destructive",
       });
     } finally {
@@ -487,14 +421,12 @@ If you cannot extract any valid workout data, return:
             </div>
           )}
 
-          {/* API Key Warning */}
-          {OPENAI_API_KEY === 'your-api-key-here' && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-800 text-sm">
-                Please set your OpenAI API key in the environment variable VITE_OPENAI_API_KEY
-              </p>
-            </div>
-          )}
+          {/* Proxy API Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-blue-800 text-sm">
+              Using proxy API for workout processing. Make sure your local proxy server is running at: {PROXY_API_URL}
+            </p>
+          </div>
 
           {/* Transcript Display */}
           {(transcript || isTranscribing) && (

@@ -48,7 +48,7 @@ const Auth = () => {
       } else if (!isSignIn) {
         toast({
           title: "Success",
-          description: "Account created successfully! Please check your email to confirm your account.",
+          description: "Account created successfully! You are now logged in.",
         });
       }
     } catch (error) {
