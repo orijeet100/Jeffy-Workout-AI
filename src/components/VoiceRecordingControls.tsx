@@ -3,8 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Square, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
-import { useExerciseKnowledge } from '@/hooks/useExerciseKnowledge';
-import { supabase } from '@/integrations/supabase/client';
 
 interface VoiceRecordingControlsProps {
   onWorkoutParsed: (workoutData: any) => void;
@@ -41,8 +39,6 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  
-  const { exercises } = useExerciseKnowledge();
 
   useEffect(() => {
     // Initialize speech recognition if available
@@ -119,7 +115,11 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({
       
       // Start speech recognition
       if (recognitionRef.current) {
-        recognitionRef.current.start();
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.error('Speech recognition start error:', error);
+        }
       }
       
       toast({
@@ -149,7 +149,11 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({
       
       // Stop speech recognition
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error('Speech recognition stop error:', error);
+        }
       }
       
       toast({
@@ -189,40 +193,78 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({
       return;
     }
 
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    if (!apiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "OpenAI API key not configured. Please set VITE_OPENAI_API_KEY in your environment.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setInternalIsParsing(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('parse-workout', {
-        body: {
-          transcript: internalTranscript.trim(),
-          exerciseKnowledge: exercises
-        }
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a fitness assistant that parses workout transcripts into structured data. Parse the workout and return a JSON object with exercises array containing name, muscleGroup, and sets with weight, reps, duration_seconds, and notes.'
+            },
+            {
+              role: 'user',
+              content: `Parse this workout transcript: "${internalTranscript}"`
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1500
+        }),
       });
 
-      if (error) {
-        console.error('Supabase function error:', error);
-        toast({
-          title: "Parsing Error",
-          description: "Failed to parse workout. Please try again.",
-          variant: "destructive"
-        });
-        return;
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
-      if (data && data.exercises && data.exercises.length > 0) {
-        onWorkoutParsed(data);
-        toast({
-          title: "Workout Parsed Successfully",
-          description: `Found ${data.exercises.length} exercise(s) in your recording.`,
-        });
+      const data = await response.json();
+      const parsedContent = data.choices[0]?.message?.content;
+
+      if (!parsedContent) {
+        throw new Error('No response from OpenAI');
+      }
+
+      try {
+        const workoutData = JSON.parse(parsedContent);
         
-        // Clear the recording after successful parsing
-        setInternalAudioUrl(null);
-        setInternalTranscript('');
-      } else {
+        if (workoutData && workoutData.exercises && workoutData.exercises.length > 0) {
+          onWorkoutParsed(workoutData);
+          toast({
+            title: "Workout Parsed Successfully",
+            description: `Found ${workoutData.exercises.length} exercise(s) in your recording.`,
+          });
+          
+          // Clear the recording after successful parsing
+          setInternalAudioUrl(null);
+          setInternalTranscript('');
+        } else {
+          toast({
+            title: "No Exercises Found",
+            description: "Couldn't identify any exercises in your recording. Please try again with clearer speech.",
+            variant: "destructive"
+          });
+        }
+      } catch (parseError) {
+        console.error('Failed to parse OpenAI response:', parseError);
         toast({
-          title: "No Exercises Found",
-          description: "Couldn't identify any exercises in your recording. Please try again with clearer speech.",
+          title: "Parsing Error",
+          description: "Failed to parse AI response. Please try again.",
           variant: "destructive"
         });
       }
