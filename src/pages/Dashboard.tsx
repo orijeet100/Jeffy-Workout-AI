@@ -20,7 +20,7 @@ const Dashboard = () => {
   const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [parsedWorkoutData, setParsedWorkoutData] = useState<any>(null);
   
-  const { workouts, addWorkout, isLoading: workoutsLoading } = useWorkouts();
+  const { workouts, addWorkout, updateWorkout, deleteWorkout, isLoading: workoutsLoading } = useWorkouts();
   const { exercises, isLoading: exercisesLoading } = useExerciseKnowledge();
 
   const handleCreateWorkout = async () => {
@@ -231,7 +231,12 @@ const Dashboard = () => {
         {workoutsWithTimestamp && workoutsWithTimestamp.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workoutsWithTimestamp.slice(0, 6).map((workout) => (
-              <WorkoutCard key={workout.id} workout={workout} />
+              <WorkoutCard 
+                key={workout.id} 
+                workout={workout} 
+                onDelete={deleteWorkout}
+                onUpdate={updateWorkout}
+              />
             ))}
           </div>
         ) : (

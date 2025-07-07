@@ -382,47 +382,28 @@ If you cannot extract any valid workout data, return:
     }
   };
 
-  const handleSave = () => {
-    if (exerciseSets.length === 0) {
+  const handleWorkoutParsed = (workoutData: any) => {
+    if (workoutData && workoutData.exercises && Array.isArray(workoutData.exercises)) {
+      // Convert parsed exercises to exercise sets format
+      const exerciseSets = workoutData.exercises.map((exercise: any) => 
+        exercise.sets.map((set: any, index: number) => ({
+          id: crypto.randomUUID(),
+          exerciseName: exercise.name,
+          muscleGroup: exercise.muscleGroup,
+          weight: set.weight ? `${set.weight}` : '',
+          reps: set.reps || 0,
+          duration_seconds: set.duration_seconds,
+          notes: set.notes || ''
+        }))
+      ).flat();
+
+      setExerciseSets(exerciseSets);
       toast({
-        title: "No Exercise Sets",
-        description: "Please add at least one exercise set.",
-        variant: "destructive",
+        title: "Workout Parsed Successfully",
+        description: `Found ${exerciseSets.length} exercise set(s) in your recording.`,
       });
-      return;
     }
-
-    const validSets = exerciseSets.filter(set => 
-      set.exerciseName.trim() && set.muscleGroup.trim() && set.weight.trim() && set.reps > 0
-    );
-
-    if (validSets.length === 0) {
-      toast({
-        title: "Invalid Sets",
-        description: "Please fill in all required fields for at least one set.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const workout = {
-      date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      title: `Workout - ${selectedDate ? format(selectedDate, 'MMM dd') : format(new Date(), 'MMM dd')}`,
-      exerciseSets: validSets,
-    };
-
-    onSave(workout);
   };
-
-  // Initialize with one empty set if none exist
-  useEffect(() => {
-    if (exerciseSets.length === 0) {
-      addNewSet();
-    }
-  }, []);
-
-  // Check if speech recognition is supported
-  const isSpeechRecognitionSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -452,6 +433,7 @@ If you cannot extract any valid workout data, return:
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
             errorMessage={errorMessage}
+            onWorkoutParsed={handleWorkoutParsed}
           />
 
           {/* Speech Recognition Status */}
