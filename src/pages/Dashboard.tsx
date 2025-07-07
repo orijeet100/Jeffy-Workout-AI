@@ -1,261 +1,179 @@
 
-import React, { useState } from 'react';
-import { Plus, Calendar, TrendingUp, Dumbbell } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect } from 'react';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import WorkoutCard from '@/components/WorkoutCard';
-import { VoiceRecordingControls } from '@/components/VoiceRecordingControls';
-import ExerciseSetForm from '@/components/ExerciseSetForm';
-import { useWorkouts } from '@/hooks/useWorkouts';
-import { useExerciseKnowledge } from '@/hooks/useExerciseKnowledge';
-import { toast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Plus, Calendar as CalendarIcon, Dumbbell } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
+import WorkoutCard from '@/components/WorkoutCard';
+import VoiceRecorder from '@/components/VoiceRecorder';
+import { Workout } from '@/types/workout';
 
 const Dashboard = () => {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [workoutTitle, setWorkoutTitle] = useState('');
-  const [workoutDate, setWorkoutDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [parsedWorkoutData, setParsedWorkoutData] = useState<any>(null);
-  
-  const { workouts, addWorkout, updateWorkout, deleteWorkout, isLoading: workoutsLoading } = useWorkouts();
-  const { exercises, isLoading: exercisesLoading } = useExerciseKnowledge();
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [showAddWorkout, setShowAddWorkout] = useState(false);
 
-  const handleCreateWorkout = async () => {
-    if (!workoutTitle.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a workout title",
-        variant: "destructive"
-      });
-      return;
+  // Load workouts from localStorage on component mount
+  useEffect(() => {
+    const savedWorkouts = localStorage.getItem('workouts');
+    if (savedWorkouts) {
+      setWorkouts(JSON.parse(savedWorkouts));
     }
+  }, []);
 
-    try {
-      // Convert parsed exercises to exercise sets format
-      const exerciseSets = parsedWorkoutData?.exercises?.map((exercise: any) => 
-        exercise.sets.map((set: any, index: number) => ({
-          id: crypto.randomUUID(),
-          exerciseName: exercise.name,
-          muscleGroup: exercise.muscleGroup,
-          weight: set.weight ? `${set.weight}` : '',
-          reps: set.reps || 0,
-          duration_seconds: set.duration_seconds,
-          notes: set.notes || ''
-        }))
-      ).flat() || [];
+  // Save workouts to localStorage whenever workouts change
+  useEffect(() => {
+    localStorage.setItem('workouts', JSON.stringify(workouts));
+  }, [workouts]);
 
-      const workoutData = {
-        title: workoutTitle,
-        date: workoutDate,
-        exerciseSets: exerciseSets
+  const addWorkout = (workoutData: Omit<Workout, 'id' | 'timestamp'>) => {
+    const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+    
+    // Check if there's already a workout for this date
+    const existingWorkoutIndex = workouts.findIndex(workout => workout.date === selectedDateString);
+    
+    if (existingWorkoutIndex !== -1) {
+      // Merge with existing workout, grouping by muscle group and exercise
+      const existingWorkout = workouts[existingWorkoutIndex];
+      const mergedSets = [...existingWorkout.exerciseSets, ...workoutData.exerciseSets];
+      
+      const updatedWorkout = {
+        ...existingWorkout,
+        exerciseSets: mergedSets
       };
-
-      const newWorkout = await addWorkout(workoutData);
-
-      if (newWorkout) {
-        setIsCreateDialogOpen(false);
-        setWorkoutTitle('');
-        setWorkoutDate(format(new Date(), 'yyyy-MM-dd'));
-        setParsedWorkoutData(null);
-        
-        toast({
-          title: "Workout Created",
-          description: `${workoutTitle} has been added to your workouts.`,
-        });
-      }
-    } catch (error) {
-      console.error('Error creating workout:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create workout. Please try again.",
-        variant: "destructive"
-      });
+      
+      setWorkouts(prev => prev.map((workout, index) => 
+        index === existingWorkoutIndex ? updatedWorkout : workout
+      ));
+    } else {
+      // Create new workout
+      const newWorkout: Workout = {
+        ...workoutData,
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+      };
+      setWorkouts(prev => [...prev, newWorkout]);
     }
+    
+    setShowAddWorkout(false);
+    toast({
+      title: "Workout Added!",
+      description: "Your workout has been saved successfully.",
+    });
   };
 
-  const handleWorkoutParsed = (workoutData: any) => {
-    setParsedWorkoutData(workoutData);
-    setWorkoutTitle(`Workout - ${format(new Date(), 'MMM dd, yyyy')}`);
+  const updateWorkout = (updatedWorkout: Workout) => {
+    setWorkouts(prev => prev.map(workout => 
+      workout.id === updatedWorkout.id ? updatedWorkout : workout
+    ));
+    toast({
+      title: "Workout Updated!",
+      description: "Your changes have been saved.",
+    });
   };
 
-  const totalWorkouts = workouts?.length || 0;
-  const thisWeekWorkouts = workouts?.filter(workout => {
-    const workoutDate = new Date(workout.date);
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    return workoutDate >= weekStart;
-  }).length || 0;
+  const deleteWorkout = (id: string) => {
+    setWorkouts(prev => prev.filter(workout => workout.id !== id));
+    toast({
+      title: "Workout Deleted",
+      description: "Workout has been removed from your history.",
+    });
+  };
 
-  const totalExercises = exercises ? Object.values(exercises).flat().length : 0;
-
-  if (workoutsLoading || exercisesLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-600">Loading dashboard...</div>
-      </div>
-    );
-  }
-
-  // Transform workouts to include timestamp for WorkoutCard compatibility
-  const workoutsWithTimestamp = workouts?.map(workout => ({
-    ...workout,
-    timestamp: new Date(workout.created_at || workout.date).getTime()
-  })) || [];
+  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+  const todaysWorkouts = workouts.filter(workout => workout.date === selectedDateString);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-          Dashboard
-        </h1>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              New Workout
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Workout</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <VoiceRecordingControls onWorkoutParsed={handleWorkoutParsed} />
-              
-              <div className="space-y-2">
-                <Label htmlFor="title">Workout Title</Label>
-                <Input
-                  id="title"
-                  placeholder="Enter workout title"
-                  value={workoutTitle}
-                  onChange={(e) => setWorkoutTitle(e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={workoutDate}
-                  onChange={(e) => setWorkoutDate(e.target.value)}
-                />
-              </div>
-
-              {parsedWorkoutData && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800 mb-2">Parsed Workout Preview:</p>
-                  <div className="space-y-2">
-                    {parsedWorkoutData.exercises.map((exercise: any, index: number) => (
-                      <div key={index} className="text-sm text-blue-700">
-                        <strong>{exercise.name}</strong> - {exercise.sets.length} set(s)
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  onClick={handleCreateWorkout}
-                  className="flex-1"
-                  disabled={!workoutTitle.trim()}
-                >
-                  Create Workout
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsCreateDialogOpen(false);
-                    setParsedWorkoutData(null);
-                    setWorkoutTitle('');
-                  }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-purple-700">
-              Total Workouts
-            </CardTitle>
-            <Dumbbell className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-800">{totalWorkouts}</div>
-            <p className="text-xs text-purple-600">All time</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700">
-              This Week
-            </CardTitle>
-            <Calendar className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-800">{thisWeekWorkouts}</div>
-            <p className="text-xs text-blue-600">Workouts completed</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-green-700">
-              Exercise Library
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-800">{totalExercises}</div>
-            <p className="text-xs text-green-600">Available exercises</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Workouts */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Recent Workouts</h2>
-        {workoutsWithTimestamp && workoutsWithTimestamp.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workoutsWithTimestamp.slice(0, 6).map((workout) => (
-              <WorkoutCard 
-                key={workout.id} 
-                workout={workout} 
-                onDelete={deleteWorkout}
-                onUpdate={updateWorkout}
-              />
-            ))}
-          </div>
-        ) : (
-          <Card className="p-8 text-center">
-            <CardContent>
-              <Dumbbell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No workouts yet</h3>
-              <p className="text-gray-500 mb-4">Start tracking your fitness journey by creating your first workout.</p>
-              <Button 
-                onClick={() => setIsCreateDialogOpen(true)}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+    <div className="max-w-md mx-auto space-y-6">
+      {/* Date Selector */}
+      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5 text-purple-600" />
+            Select Date
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal bg-white/50 border-purple-200 hover:bg-white/70",
+                  !selectedDate && "text-muted-foreground"
+                )}
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Workout
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        </CardContent>
+      </Card>
+
+      {/* Summary Card */}
+      <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+        <CardContent className="p-4 text-center">
+          <p className="text-lg font-semibold text-gray-800">
+            Workouts for {format(selectedDate, "MMM dd, yyyy")}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Add Workout Button */}
+      <div className="flex justify-center">
+        <Button
+          onClick={() => setShowAddWorkout(true)}
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-2xl shadow-lg transform transition-all duration-200 hover:scale-105"
+        >
+          <Plus className="mr-2 h-5 w-5" />
+          Add Workout
+        </Button>
       </div>
+
+      {/* Today's Workouts */}
+      {todaysWorkouts.length === 0 ? (
+        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+          <CardContent className="text-center py-8 text-gray-500">
+            <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-50" />
+            <p>No workouts recorded for this day</p>
+            <p className="text-sm mt-1">Tap "Add Workout" to get started!</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {todaysWorkouts.map((workout) => (
+            <WorkoutCard
+              key={workout.id}
+              workout={workout}
+              onDelete={deleteWorkout}
+              onUpdate={updateWorkout}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Voice Recorder Modal */}
+      {showAddWorkout && (
+        <VoiceRecorder
+          selectedDate={selectedDate}
+          onSave={addWorkout}
+          onClose={() => setShowAddWorkout(false)}
+        />
+      )}
     </div>
   );
 };

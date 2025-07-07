@@ -1,45 +1,113 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
-import { useExerciseKnowledge } from '@/hooks/useExerciseKnowledge';
+import { toast } from '@/hooks/use-toast';
+
+const defaultExercises = {
+  Chest: [
+    'Bench Press', 'Incline Bench Press', 'Decline Bench Press', 'Dumbbell Flyes',
+    'Push-ups', 'Dips', 'Incline Dumbbell Press', 'Cable Crossovers', 'Chest Press Machine', 'Pec Deck'
+  ],
+  Back: [
+    'Pull-ups', 'Chin-ups', 'Deadlifts', 'Bent-over Rows', 'Lat Pulldowns',
+    'T-Bar Rows', 'Cable Rows', 'Single-arm Dumbbell Rows', 'Face Pulls', 'Reverse Flyes'
+  ],
+  Legs: [
+    'Squats', 'Deadlifts', 'Leg Press', 'Lunges', 'Romanian Deadlifts',
+    'Bulgarian Split Squats', 'Leg Curls', 'Leg Extensions', 'Calf Raises', 'Hip Thrusts'
+  ],
+  Biceps: [
+    'Bicep Curls', 'Hammer Curls', 'Preacher Curls', 'Concentration Curls', 'Cable Curls',
+    'Barbell Curls', '21s', 'Incline Dumbbell Curls', 'Reverse Curls', 'Chin-ups'
+  ],
+  Triceps: [
+    'Tricep Dips', 'Close-grip Bench Press', 'Overhead Tricep Extension', 'Tricep Pushdowns',
+    'Diamond Push-ups', 'Skull Crushers', 'Tricep Kickbacks', 'Rope Pushdowns', 'Bench Dips', 'Overhead Dumbbell Extension'
+  ],
+  Shoulders: [
+    'Shoulder Press', 'Lateral Raises', 'Front Raises', 'Rear Delt Flyes', 'Arnold Press',
+    'Upright Rows', 'Shrugs', 'Pike Push-ups', 'Face Pulls', 'Handstand Push-ups'
+  ],
+  Abs: [
+    'Crunches', 'Planks', 'Sit-ups', 'Russian Twists', 'Leg Raises',
+    'Mountain Climbers', 'Bicycle Crunches', 'Dead Bug', 'Ab Wheel Rollouts', 'Hanging Knee Raises'
+  ]
+};
 
 const ExerciseKnowledge = () => {
-  const { exercises, isLoading, addMuscleGroup, deleteMuscleGroup, addExercise, deleteExercise } = useExerciseKnowledge();
+  const [exercises, setExercises] = useState<Record<string, string[]>>(defaultExercises);
   const [editingMuscleGroup, setEditingMuscleGroup] = useState<string | null>(null);
   const [newMuscleGroup, setNewMuscleGroup] = useState('');
   const [newExercise, setNewExercise] = useState('');
   const [showAddMuscleGroup, setShowAddMuscleGroup] = useState(false);
 
-  const handleAddMuscleGroup = () => {
+  // Load exercises from localStorage on component mount
+  useEffect(() => {
+    const savedExercises = localStorage.getItem('exerciseKnowledge');
+    if (savedExercises) {
+      setExercises(JSON.parse(savedExercises));
+    }
+  }, []);
+
+  // Save exercises to localStorage whenever exercises change
+  useEffect(() => {
+    localStorage.setItem('exerciseKnowledge', JSON.stringify(exercises));
+  }, [exercises]);
+
+  const addMuscleGroup = () => {
     if (newMuscleGroup.trim() && !exercises[newMuscleGroup]) {
-      addMuscleGroup(newMuscleGroup);
+      setExercises(prev => ({
+        ...prev,
+        [newMuscleGroup]: []
+      }));
       setNewMuscleGroup('');
       setShowAddMuscleGroup(false);
+      toast({
+        title: "Muscle Group Added",
+        description: `${newMuscleGroup} has been added to your exercise knowledge.`,
+      });
     }
   };
 
-  const handleAddExercise = (muscleGroup: string) => {
+  const deleteMuscleGroup = (muscleGroup: string) => {
+    const updatedExercises = { ...exercises };
+    delete updatedExercises[muscleGroup];
+    setExercises(updatedExercises);
+    toast({
+      title: "Muscle Group Deleted",
+      description: `${muscleGroup} has been removed from your exercise knowledge.`,
+    });
+  };
+
+  const addExercise = (muscleGroup: string) => {
     if (newExercise.trim()) {
-      addExercise({ muscleGroup, exerciseName: newExercise });
+      setExercises(prev => ({
+        ...prev,
+        [muscleGroup]: [...prev[muscleGroup], newExercise]
+      }));
       setNewExercise('');
       setEditingMuscleGroup(null);
+      toast({
+        title: "Exercise Added",
+        description: `${newExercise} has been added to ${muscleGroup}.`,
+      });
     }
   };
 
-  const handleDeleteExercise = (muscleGroup: string, exerciseName: string) => {
-    deleteExercise({ muscleGroup, exerciseName });
+  const deleteExercise = (muscleGroup: string, exerciseIndex: number) => {
+    setExercises(prev => ({
+      ...prev,
+      [muscleGroup]: prev[muscleGroup].filter((_, index) => index !== exerciseIndex)
+    }));
+    toast({
+      title: "Exercise Deleted",
+      description: "Exercise has been removed.",
+    });
   };
-
-  if (isLoading) {
-    return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="text-center">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -62,9 +130,9 @@ const ExerciseKnowledge = () => {
                 placeholder="Enter muscle group name"
                 value={newMuscleGroup}
                 onChange={(e) => setNewMuscleGroup(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddMuscleGroup()}
+                onKeyPress={(e) => e.key === 'Enter' && addMuscleGroup()}
               />
-              <Button onClick={handleAddMuscleGroup} size="sm">
+              <Button onClick={addMuscleGroup} size="sm">
                 <Save className="h-4 w-4" />
               </Button>
               <Button 
@@ -113,7 +181,7 @@ const ExerciseKnowledge = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDeleteExercise(muscleGroup, exercise)}
+                        onClick={() => deleteExercise(muscleGroup, index)}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -127,9 +195,9 @@ const ExerciseKnowledge = () => {
                       placeholder="Add new exercise"
                       value={newExercise}
                       onChange={(e) => setNewExercise(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddExercise(muscleGroup)}
+                      onKeyPress={(e) => e.key === 'Enter' && addExercise(muscleGroup)}
                     />
-                    <Button onClick={() => handleAddExercise(muscleGroup)} size="sm">
+                    <Button onClick={() => addExercise(muscleGroup)} size="sm">
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
