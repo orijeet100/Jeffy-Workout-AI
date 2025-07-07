@@ -26,14 +26,15 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
 
   useEffect(() => {
     // Initialize speech recognition if available
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
+    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (SpeechRecognitionClass) {
+      recognitionRef.current = new SpeechRecognitionClass();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
       
-      recognitionRef.current.onresult = (event) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
@@ -45,7 +46,7 @@ export const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({ 
         }
       };
 
-      recognitionRef.current.onerror = (event) => {
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         if (event.error === 'not-allowed') {
           toast({

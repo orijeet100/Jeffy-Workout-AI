@@ -3,131 +3,209 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { toast } from './use-toast';
+import { toast } from '@/hooks/use-toast';
 
-export interface ExerciseSet {
+interface WorkoutSet {
+  weight: number | null;
+  reps: number | null;
+  duration_seconds: number | null;
+  notes: string | null;
+}
+
+interface WorkoutExercise {
+  name: string;
+  muscleGroup: string;
+  sets: WorkoutSet[];
+}
+
+interface Workout {
   id: string;
+  title: string;
+  date: string;
+  user_id: string;
+  exercises?: WorkoutExercise[];
+  exerciseSets?: any[];
+}
+
+interface ExerciseSet {
+  id?: string;
   exerciseName: string;
   muscleGroup: string;
   weight: string;
   reps: number;
   duration_seconds?: number;
-  weight_unit: 'lbs' | 'kg';
+  notes?: string;
 }
 
-export interface Workout {
-  id: string;
-  date: string;
+interface CreateWorkoutData {
   title: string;
-  exerciseSets: ExerciseSet[];
-  timestamp: number;
+  date: string;
+  exerciseSets?: ExerciseSet[];
+  exercises?: WorkoutExercise[];
 }
 
-export const useWorkouts = (selectedDate: Date) => {
+export const useWorkouts = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: workouts = [], isLoading } = useQuery({
+  // Fetch workouts
+  const { data: workouts, isLoading, error } = useQuery({
     queryKey: ['workouts', user?.id],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user?.id) return [];
 
-      const { data: workoutData, error } = await supabase
+      const { data: workoutsData, error: workoutsError } = await supabase
         .from('workouts')
-        .select(`
-          *,
-          exercise_sets (
-            *,
-            exercises (
-              name,
-              muscle_groups (name)
-            )
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
-      if (error) throw error;
+      if (workoutsError) {
+        console.error('Error fetching workouts:', workoutsError);
+        throw workoutsError;
+      }
 
-      return workoutData.map(workout => ({
-        id: workout.id,
-        date: workout.date,
-        title: workout.title,
-        timestamp: new Date(workout.created_at).getTime(),
-        exerciseSets: workout.exercise_sets.map(set => ({
-          id: set.id,
-          exerciseName: set.exercises.name,
-          muscleGroup: set.exercises.muscle_groups.name,
-          weight: set.weight?.toString() || '0',
-          reps: set.reps || 0,
-          duration_seconds: set.duration_seconds,
-          weight_unit: set.weight_unit as 'lbs' | 'kg'
-        }))
-      }));
+      // Fetch exercise sets for each workout
+      const workoutsWithSets = await Promise.all(
+        (workoutsData || []).map(async (workout) => {
+          const { data: setsData, error: setsError } = await supabase
+            .from('exercise_sets')
+            .select(`
+              *,
+              exercises (
+                name,
+                muscle_groups (name)
+              )
+            `)
+            .eq('workout_id', workout.id)
+            .order('set_order');
+
+          if (setsError) {
+            console.error('Error fetching exercise sets:', setsError);
+            return { ...workout, exerciseSets: [] };
+          }
+
+          const exerciseSets = (setsData || []).map(set => ({
+            id: set.id,
+            exerciseName: set.exercises?.name || 'Unknown Exercise',
+            muscleGroup: set.exercises?.muscle_groups?.name || 'Unknown',
+            weight: set.weight ? `${set.weight} ${set.weight_unit || 'lbs'}` : '',
+            reps: set.reps || 0,
+            duration_seconds: set.duration_seconds,
+            notes: set.notes || ''
+          }));
+
+          return { ...workout, exerciseSets };
+        })
+      );
+
+      return workoutsWithSets;
     },
-    enabled: !!user
+    enabled: !!user?.id,
   });
 
+  // Add workout mutation
   const addWorkoutMutation = useMutation({
-    mutationFn: async (workoutData: Omit<Workout, 'id' | 'timestamp'>) => {
-      if (!user) throw new Error('User not authenticated');
+    mutationFn: async (workoutData: CreateWorkoutData) => {
+      if (!user?.id) throw new Error('User not authenticated');
 
       // Create workout
       const { data: workout, error: workoutError } = await supabase
         .from('workouts')
         .insert({
-          user_id: user.id,
+          title: workoutData.title,
           date: workoutData.date,
-          title: workoutData.title
+          user_id: user.id,
         })
         .select()
         .single();
 
-      if (workoutError) throw workoutError;
+      if (workoutError) {
+        console.error('Error creating workout:', workoutError);
+        throw workoutError;
+      }
 
-      // Add exercise sets
-      for (const exerciseSet of workoutData.exerciseSets) {
-        // Find or create exercise
-        const { data: muscleGroup } = await supabase
-          .from('muscle_groups')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('name', exerciseSet.muscleGroup)
-          .single();
-
-        if (!muscleGroup) continue;
-
-        let { data: exercise } = await supabase
-          .from('exercises')
-          .select('id')
-          .eq('muscle_group_id', muscleGroup.id)
-          .eq('name', exerciseSet.exerciseName)
-          .single();
-
-        if (!exercise) {
-          const { data: newExercise } = await supabase
+      // Add exercise sets if provided
+      if (workoutData.exerciseSets && workoutData.exerciseSets.length > 0) {
+        for (let i = 0; i < workoutData.exerciseSets.length; i++) {
+          const set = workoutData.exerciseSets[i];
+          
+          // Find or create exercise
+          let exerciseId;
+          const { data: existingExercise } = await supabase
             .from('exercises')
-            .insert({
-              muscle_group_id: muscleGroup.id,
-              name: exerciseSet.exerciseName,
-              metric_type: exerciseSet.duration_seconds ? 'time_based' : 'weight_reps'
-            })
-            .select()
+            .select('id')
+            .eq('name', set.exerciseName)
+            .eq('muscle_group_id', (
+              await supabase
+                .from('muscle_groups')
+                .select('id')
+                .eq('name', set.muscleGroup)
+                .eq('user_id', user.id)
+                .single()
+            ).data?.id)
             .single();
-          exercise = newExercise;
-        }
 
-        if (exercise) {
-          await supabase
-            .from('exercise_sets')
-            .insert({
-              workout_id: workout.id,
-              exercise_id: exercise.id,
-              weight: parseFloat(exerciseSet.weight) || null,
-              reps: exerciseSet.reps || null,
-              duration_seconds: exerciseSet.duration_seconds || null,
-              weight_unit: exerciseSet.weight_unit
-            });
+          if (existingExercise) {
+            exerciseId = existingExercise.id;
+          } else {
+            // Create new exercise if it doesn't exist
+            const { data: muscleGroup } = await supabase
+              .from('muscle_groups')
+              .select('id')
+              .eq('name', set.muscleGroup)
+              .eq('user_id', user.id)
+              .single();
+
+            if (muscleGroup) {
+              const { data: newExercise, error: exerciseError } = await supabase
+                .from('exercises')
+                .insert({
+                  name: set.exerciseName,
+                  muscle_group_id: muscleGroup.id,
+                  metric_type: 'weight_reps',
+                })
+                .select()
+                .single();
+
+              if (exerciseError) throw exerciseError;
+              exerciseId = newExercise.id;
+            }
+          }
+
+          if (exerciseId) {
+            // Parse weight
+            let weight = null;
+            let weightUnit = 'lbs';
+            if (set.weight) {
+              const weightMatch = set.weight.match(/(\d+(?:\.\d+)?)\s*(lbs?|kg|pounds?|kilograms?)?/i);
+              if (weightMatch) {
+                weight = parseFloat(weightMatch[1]);
+                const unit = weightMatch[2]?.toLowerCase();
+                if (unit && (unit.startsWith('kg') || unit.startsWith('kilo'))) {
+                  weightUnit = 'kg';
+                }
+              }
+            }
+
+            const { error: setError } = await supabase
+              .from('exercise_sets')
+              .insert({
+                workout_id: workout.id,
+                exercise_id: exerciseId,
+                weight: weight,
+                weight_unit: weightUnit as 'lbs' | 'kg',
+                reps: set.reps,
+                duration_seconds: set.duration_seconds,
+                notes: set.notes,
+                set_order: i + 1,
+              });
+
+            if (setError) {
+              console.error('Error creating exercise set:', setError);
+              throw setError;
+            }
+          }
         }
       }
 
@@ -135,46 +213,22 @@ export const useWorkouts = (selectedDate: Date) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workouts'] });
-      toast({
-        title: "Workout Added!",
-        description: "Your workout has been saved successfully.",
-      });
     },
     onError: (error) => {
+      console.error('Error adding workout:', error);
       toast({
         title: "Error",
-        description: "Failed to save workout",
+        description: "Failed to add workout. Please try again.",
         variant: "destructive"
       });
     }
   });
 
-  const deleteWorkoutMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('workouts')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workouts'] });
-      toast({
-        title: "Workout Deleted",
-        description: "Workout has been removed from your history.",
-      });
-    }
-  });
-
-  const selectedDateString = selectedDate.toISOString().split('T')[0];
-  const todaysWorkouts = workouts.filter(workout => workout.date === selectedDateString);
-
   return {
-    workouts: todaysWorkouts,
+    workouts,
     isLoading,
-    addWorkout: addWorkoutMutation.mutate,
-    deleteWorkout: deleteWorkoutMutation.mutate,
-    updateWorkout: () => {} // Will implement later
+    error,
+    addWorkout: addWorkoutMutation.mutateAsync,
+    isAddingWorkout: addWorkoutMutation.isPending,
   };
 };

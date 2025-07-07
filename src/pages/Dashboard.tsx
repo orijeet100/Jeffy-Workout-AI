@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { WorkoutCard } from '@/components/WorkoutCard';
+import WorkoutCard from '@/components/WorkoutCard';
 import { VoiceRecordingControls } from '@/components/VoiceRecordingControls';
-import { ExerciseSetForm } from '@/components/ExerciseSetForm';
+import ExerciseSetForm from '@/components/ExerciseSetForm';
 import { useWorkouts } from '@/hooks/useWorkouts';
 import { useExerciseKnowledge } from '@/hooks/useExerciseKnowledge';
 import { toast } from '@/hooks/use-toast';
@@ -34,11 +34,26 @@ const Dashboard = () => {
     }
 
     try {
-      const newWorkout = await addWorkout({
+      // Convert parsed exercises to exercise sets format
+      const exerciseSets = parsedWorkoutData?.exercises?.map((exercise: any) => 
+        exercise.sets.map((set: any, index: number) => ({
+          id: crypto.randomUUID(),
+          exerciseName: exercise.name,
+          muscleGroup: exercise.muscleGroup,
+          weight: set.weight ? `${set.weight}` : '',
+          reps: set.reps || 0,
+          duration_seconds: set.duration_seconds,
+          notes: set.notes || ''
+        }))
+      ).flat() || [];
+
+      const workoutData = {
         title: workoutTitle,
         date: workoutDate,
-        exercises: parsedWorkoutData?.exercises || []
-      });
+        exerciseSets: exerciseSets
+      };
+
+      const newWorkout = await addWorkout(workoutData);
 
       if (newWorkout) {
         setIsCreateDialogOpen(false);
@@ -74,7 +89,7 @@ const Dashboard = () => {
     return workoutDate >= weekStart;
   }).length || 0;
 
-  const totalExercises = Object.values(exercises).flat().length;
+  const totalExercises = Object.values(exercises || {}).flat().length;
 
   if (workoutsLoading || exercisesLoading) {
     return (

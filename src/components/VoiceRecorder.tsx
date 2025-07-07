@@ -5,7 +5,7 @@ import { X, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Workout, ExerciseSet, LLMResponse } from '@/types/workout';
-import VoiceRecordingControls from './VoiceRecordingControls';
+import { VoiceRecordingControls } from './VoiceRecordingControls';
 import ExerciseSetForm from './ExerciseSetForm';
 
 interface VoiceRecorderProps {
