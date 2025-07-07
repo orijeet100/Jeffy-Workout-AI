@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Dumbbell } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 const Auth = () => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -16,7 +17,15 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +49,10 @@ const Auth = () => {
       }
 
       if (result.error) {
+        console.error('Auth error:', result.error);
         toast({
           title: "Error",
-          description: result.error.message,
+          description: result.error.message || "An error occurred during authentication",
           variant: "destructive"
         });
       } else if (!isSignIn) {
@@ -50,8 +60,14 @@ const Auth = () => {
           title: "Success",
           description: "Account created successfully! You are now logged in.",
         });
+      } else {
+        toast({
+          title: "Success",
+          description: "Signed in successfully!",
+        });
       }
     } catch (error) {
+      console.error('Unexpected auth error:', error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -73,13 +89,15 @@ const Auth = () => {
       });
       
       if (error) {
+        console.error('Google sign in error:', error);
         toast({
           title: "Error",
-          description: error.message,
+          description: error.message || "Failed to sign in with Google",
           variant: "destructive"
         });
       }
     } catch (error) {
+      console.error('Unexpected Google auth error:', error);
       toast({
         title: "Error",
         description: "Failed to sign in with Google",
@@ -140,6 +158,7 @@ const Auth = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required={!isSignIn}
+                  disabled={loading}
                 />
               </div>
             )}
@@ -153,6 +172,7 @@ const Auth = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             
@@ -166,6 +186,7 @@ const Auth = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                disabled={loading}
               />
             </div>
             
@@ -184,6 +205,7 @@ const Auth = () => {
               variant="ghost"
               onClick={() => setIsSignIn(!isSignIn)}
               className="text-sm"
+              disabled={loading}
             >
               {isSignIn ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </Button>
