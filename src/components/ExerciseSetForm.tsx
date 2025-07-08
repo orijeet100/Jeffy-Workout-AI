@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,9 +74,11 @@ const ExerciseSetForm: React.FC<ExerciseSetFormProps> = ({
                 <Label htmlFor={`weight-${set.id}`}>Weight *</Label>
                 <Input
                   id={`weight-${set.id}`}
-                  value={set.weight}
-                  onChange={(e) => onUpdateSet(set.id, 'weight', e.target.value)}
-                  placeholder="e.g., 185 lbs"
+                  type="number"
+                  value={set.weight || ''}
+                  onChange={(e) => onUpdateSet(set.id, 'weight', Number(e.target.value))}
+                  placeholder="e.g., 185"
+                  min="0"
                 />
               </div>
               
@@ -87,7 +88,7 @@ const ExerciseSetForm: React.FC<ExerciseSetFormProps> = ({
                   id={`reps-${set.id}`}
                   type="number"
                   value={set.reps || ''}
-                  onChange={(e) => onUpdateSet(set.id, 'reps', parseInt(e.target.value) || 0)}
+                  onChange={(e) => onUpdateSet(set.id, 'reps', Number(e.target.value))}
                   placeholder="e.g., 8"
                   min="0"
                 />

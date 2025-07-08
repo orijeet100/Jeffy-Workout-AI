@@ -1,9 +1,8 @@
-
 export interface ExerciseSet {
   id: string;
   exerciseName: string;
   muscleGroup: string;
-  weight: string;
+  weight: number;
   reps: number;
 }
 

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -10,12 +9,14 @@ import Dashboard from "./pages/Dashboard";
 import ExerciseKnowledge from "./pages/ExerciseKnowledge";
 import Layout from "./components/Layout";
 import NotFound from "./pages/NotFound";
+import { supabase } from './integrations/client';
 
 const queryClient = new QueryClient();
 
 const App = () => {
   const [user, setUser] = useState<{ email: string; name: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Check for existing user on app load
   useEffect(() => {
@@ -24,6 +25,27 @@ const App = () => {
       setUser(JSON.parse(savedUser));
     }
     setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUser({
+          email: session.user.email || '',
+          name: session.user.user_metadata.full_name || session.user.email || '',
+        });
+        localStorage.setItem('user', JSON.stringify({
+          email: session.user.email || '',
+          name: session.user.user_metadata.full_name || session.user.email || '',
+        }));
+      } else {
+        setUser(null);
+        localStorage.removeItem('user');
+      }
+    });
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   const handleAuth = (userData: { email: string; name: string }) => {
@@ -36,7 +58,8 @@ const App = () => {
     localStorage.setItem('user', JSON.stringify({ email: 'guest@fittracker.com', name: 'Guest User' }));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     localStorage.removeItem('user');
   };
@@ -55,7 +78,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <Auth onAuth={handleAuth} onSkip={handleSkip} />
+          <Auth onAuth={handleAuth} showAuthError={!!authError} />
         </TooltipProvider>
       </QueryClientProvider>
     );

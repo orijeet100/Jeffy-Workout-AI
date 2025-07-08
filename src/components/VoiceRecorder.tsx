@@ -7,21 +7,27 @@ import { toast } from '@/hooks/use-toast';
 import { Workout, ExerciseSet, LLMResponse } from '@/types/workout';
 import VoiceRecordingControls from './VoiceRecordingControls';
 import ExerciseSetForm from './ExerciseSetForm';
+import { supabase } from '@/integrations/client';
+import { WorkoutSet } from '@/pages/Dashboard';
 
 interface VoiceRecorderProps {
   selectedDate: Date;
-  onSave: (workout: Omit<Workout, 'id' | 'timestamp'>) => void;
+  onSave: (set: { exerciseName: string; muscleGroup: string; weight: number; reps: number; }) => Promise<void>;
   onClose: () => void;
+  userId: string;
 }
 
-const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date(), onSave, onClose }) => {
+const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date(), onSave, onClose, userId }) => {
   const [isRecording, setIsRecording] = useState(false);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exerciseSets, setExerciseSets] = useState<ExerciseSet[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [transcript, setTranscript] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -104,22 +110,20 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
     id: crypto.randomUUID(),
     exerciseName: '',
     muscleGroup: '',
-    weight: '',
+    weight: 0,
     reps: 0
   });
 
   const addNewSet = () => {
-    setExerciseSets(prev => [...prev, createEmptySet()]);
+    setExerciseSets(prev => Array.isArray(prev) ? [...prev, createEmptySet()] : [createEmptySet()]);
   };
 
   const updateSet = (id: string, field: keyof ExerciseSet, value: string | number) => {
-    setExerciseSets(prev => prev.map(set => 
-      set.id === id ? { ...set, [field]: value } : set
-    ));
+    setExerciseSets(prev => Array.isArray(prev) ? prev.map(set => set.id === id ? { ...set, [field]: value } : set) : []);
   };
 
   const deleteSet = (id: string) => {
-    setExerciseSets(prev => prev.filter(set => set.id !== id));
+    setExerciseSets(prev => Array.isArray(prev) ? prev.filter(set => set.id !== id) : []);
   };
 
   const detectSilence = (stream: MediaStream) => {
@@ -268,40 +272,48 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
     }
 
     try {
-      const prompt = `You are an expert fitness AI assistant. Your task is to extract structured workout data from user speech transcripts.
+      // Fetch user's exercise knowledge
+      if (!userId) return;
+      const { data: knowledgeRow } = await supabase
+        .from('exercise_knowledge')
+        .select('data')
+        .eq('user_id', userId)
+        .single();
+      const userKnowledge = knowledgeRow?.data;
 
-IMPORTANT RULES:
-1. You must ONLY use these 7 muscle groups: Chest, Back, Legs, Biceps, Triceps, Shoulders, Abs
-2. Map all exercises to one of these muscle groups (be intelligent about mapping)
-3. Extract weight with units (lbs, kg, etc.)
-4. Extract number of reps as integer
-5. If multiple sets are mentioned, create separate entries for each set
-6. If information is unclear or missing, make reasonable assumptions based on context
-7. Return ONLY valid JSON, no additional text
+      const prompt = `You are a fitness AI assistant. Your job is to extract structured workout data from the following transcript, using ONLY the user's exercise knowledge base below.
 
-MUSCLE GROUP MAPPING EXAMPLES:
-- Bench Press, Push-ups, Chest Fly → Chest
-- Pull-ups, Rows, Lat Pulldown → Back
-- Squats, Lunges, Deadlifts, Leg Press → Legs
-- Curls, Hammer Curls → Biceps
-- Tricep Dips, Tricep Extensions → Triceps
-- Shoulder Press, Lateral Raises → Shoulders
-- Crunches, Planks, Sit-ups → Abs
+**User's Exercise Knowledge Base:**
+${JSON.stringify(userKnowledge, null, 2)}
 
-TRANSCRIPT TO ANALYZE:
-"${transcript}"
+**IMPORTANT:**
+- Only use these fields for each set:
+  - "exerciseName": string, e.g., Bench Press
+  - "muscleGroup": string, e.g., Chest
+  - "weight": number, e.g., 185 (no units, no text, just a number)
+  - "reps": number, e.g., 8 (just a number)
+- Only use muscle groups and exercises from the user's knowledge base above. Do not invent or suggest any others.
+- If any field is missing, make a reasonable guess or use 0 for weight/reps if unknown.
+- Return only valid JSON, no markdown, no extra text.
 
-Return a JSON object with this exact structure:
+**EXAMPLE OUTPUT:**
 {
   "success": true,
-  "exerciseCount": number,
+  "exerciseCount": 2,
   "sets": [
     {
-      "id": "unique-id",
-      "exerciseName": "Exercise Name",
-      "muscleGroup": "One of the 7 valid muscle groups",
-      "weight": "weight with units",
-      "reps": number
+      "id": "1",
+      "exerciseName": "Bench Press",
+      "muscleGroup": "Chest",
+      "weight": 185,
+      "reps": 8
+    },
+    {
+      "id": "2",
+      "exerciseName": "Push-ups",
+      "muscleGroup": "Chest",
+      "weight": 0,
+      "reps": 15
     }
   ]
 }
@@ -311,7 +323,12 @@ If you cannot extract any valid workout data, return:
   "success": false,
   "exerciseCount": 0,
   "error": "Brief explanation of why extraction failed"
-}`;
+}
+
+**TRANSCRIPT TO ANALYZE:**
+"${transcript}"
+
+Return only valid JSON matching the example structure above.`;
 
       const response = await fetch(OPENAI_API_URL, {
         method: 'POST',
@@ -357,11 +374,11 @@ If you cannot extract any valid workout data, return:
           id: set.id || crypto.randomUUID(),
           exerciseName: set.exerciseName || 'Unknown Exercise',
           muscleGroup: VALID_MUSCLE_GROUPS.includes(set.muscleGroup) ? set.muscleGroup : 'Chest',
-          weight: set.weight || '0 lbs',
-          reps: typeof set.reps === 'number' ? set.reps : 0
+          weight: typeof set.weight === 'number' ? set.weight : Number(String(set.weight).replace(/[^\d.]/g, '')) || 0,
+          reps: typeof set.reps === 'number' ? set.reps : Number(String(set.reps).replace(/[^\d.]/g, '')) || 0
         }));
 
-        setExerciseSets(validatedSets);
+        setExerciseSets(Array.isArray(validatedSets) ? validatedSets : [createEmptySet()]);
         toast({
           title: "AI Analysis Complete!",
           description: `Extracted ${validatedSets.length} exercise sets from your workout.`,
@@ -382,7 +399,7 @@ If you cannot extract any valid workout data, return:
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (exerciseSets.length === 0) {
       toast({
         title: "No Exercise Sets",
@@ -392,8 +409,11 @@ If you cannot extract any valid workout data, return:
       return;
     }
 
-    const validSets = exerciseSets.filter(set => 
-      set.exerciseName.trim() && set.muscleGroup.trim() && set.weight.trim() && set.reps > 0
+    const validSets = exerciseSets.filter(set =>
+      set.exerciseName.trim() &&
+      set.muscleGroup.trim() &&
+      typeof set.weight === 'number' && set.weight > 0 &&
+      typeof set.reps === 'number' && set.reps > 0
     );
 
     if (validSets.length === 0) {
@@ -405,13 +425,17 @@ If you cannot extract any valid workout data, return:
       return;
     }
 
-    const workout = {
-      date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      title: `Workout - ${selectedDate ? format(selectedDate, 'MMM dd') : format(new Date(), 'MMM dd')}`,
-      exerciseSets: validSets,
-    };
+    for (const set of validSets) {
+      const { exerciseName, muscleGroup, weight, reps } = set;
+      await onSave({ exerciseName, muscleGroup, weight, reps });
+    }
 
-    onSave(workout);
+    toast({
+      title: "Sets Saved!",
+      description: "Your sets have been saved.",
+    });
+
+    onClose();
   };
 
   // Initialize with one empty set if none exist
@@ -423,6 +447,70 @@ If you cannot extract any valid workout data, return:
 
   // Check if speech recognition is supported
   const isSpeechRecognitionSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+
+  useEffect(() => {
+    if (!userId) return;
+    const fetchOrCreateKnowledge = async () => {
+      setLoading(true);
+      setError(null);
+      const { data, error } = await supabase
+        .from('exercise_knowledge')
+        .select('data')
+        .eq('user_id', userId)
+        .single();
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+        setError('Failed to load your exercise knowledge.');
+        setLoading(false);
+        return;
+      }
+      if (data && data.data) {
+        setExerciseSets(data.data);
+      } else {
+        // Insert default for new user
+        const { error: insertError } = await supabase.from('exercise_knowledge').insert({
+          user_id: userId,
+          data: [],
+        });
+        if (insertError) {
+          setError('Failed to create your exercise knowledge.');
+        } else {
+          setExerciseSets([]);
+        }
+      }
+      setLoading(false);
+    };
+    fetchOrCreateKnowledge();
+  }, [userId]);
+
+  // Defensive initialization on mount
+  useEffect(() => {
+    if (!Array.isArray(exerciseSets) || exerciseSets.length === 0) {
+      setExerciseSets([createEmptySet()]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const savedWorkouts = localStorage.getItem('workouts');
+    if (savedWorkouts) {
+      try {
+        const parsed = JSON.parse(savedWorkouts);
+        setWorkouts(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setWorkouts([]);
+      }
+    }
+  }, []);
+
+  if (!userId) {
+    return <div className="text-center py-10 text-lg">Loading user session...</div>;
+  }
+
+  if (loading) {
+    return <div className="text-center py-10 text-lg">Loading your exercise knowledge...</div>;
+  }
+  if (error) {
+    return <div className="text-center py-10 text-lg text-red-600">{error}</div>;
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -485,7 +573,7 @@ If you cannot extract any valid workout data, return:
           )}
 
           <ExerciseSetForm
-            exerciseSets={exerciseSets}
+            exerciseSets={Array.isArray(exerciseSets) ? exerciseSets : []}
             onUpdateSet={updateSet}
             onDeleteSet={deleteSet}
             onAddNewSet={addNewSet}

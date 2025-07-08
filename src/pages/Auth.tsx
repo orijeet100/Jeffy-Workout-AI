@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,27 +5,67 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Dumbbell } from 'lucide-react';
+import { supabase } from '@/integrations/client';
 
 interface AuthProps {
   onAuth: (userData: { email: string; name: string }) => void;
-  onSkip: () => void;
+  showAuthError?: boolean;
 }
 
-const Auth = ({ onAuth, onSkip }: AuthProps) => {
+const Auth = ({ onAuth, showAuthError }: AuthProps) => {
   const [isSignIn, setIsSignIn] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // For now, we'll just pass the email as user data
-    onAuth({ email, name: name || email.split('@')[0] });
+    setError(null);
+    if (isSignIn) {
+      // Sign in with Supabase
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+      if (data.user) {
+        onAuth({
+          email: data.user.email || '',
+          name: data.user.user_metadata.full_name || data.user.email || '',
+        });
+      }
+    } else {
+      // Sign up with Supabase
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } },
+      });
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+      if (data.user) {
+        onAuth({
+          email: data.user.email || '',
+          name: name || data.user.email || '',
+        });
+      } else {
+        setError('Check your email for a confirmation link.');
+      }
+    }
   };
 
-  const handleGoogleAuth = () => {
-    // Mock Google auth for now
-    onAuth({ email: 'user@gmail.com', name: 'Google User' });
+  const handleGoogleAuth = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    if (error) {
+      alert('Google sign-in failed: ' + error.message);
+    }
+    // The redirect will happen automatically on success
   };
 
   return (
@@ -44,6 +83,16 @@ const Auth = ({ onAuth, onSkip }: AuthProps) => {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {showAuthError && (
+            <div className="text-red-600 text-center font-semibold mb-2">
+              Please create an account first or sign in using Google.
+            </div>
+          )}
+          {error && (
+            <div className="text-red-600 text-center font-semibold mb-2">
+              {error}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isSignIn && (
               <div className="space-y-2">
@@ -134,15 +183,6 @@ const Auth = ({ onAuth, onSkip }: AuthProps) => {
               className="text-sm"
             >
               {isSignIn ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-            </Button>
-            
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onSkip}
-              className="text-sm text-gray-500"
-            >
-              Skip for now
             </Button>
           </div>
         </CardContent>

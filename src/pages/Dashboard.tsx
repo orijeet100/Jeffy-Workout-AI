@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,20 +7,43 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
-import WorkoutCard from '@/components/WorkoutCard';
 import VoiceRecorder from '@/components/VoiceRecorder';
 import { Workout } from '@/types/workout';
+import { supabase } from '@/integrations/client';
+import { Input } from '@/components/ui/input';
+
+// Rename ExerciseSetRow to WorkoutSet for clarity
+export interface WorkoutSet {
+  id: string;
+  user_id: string;
+  date: string;
+  data: {
+    exerciseName: string;
+    muscleGroup: string;
+    weight: number;
+    reps: number;
+    timestamp: number;
+  };
+  created_at?: string;
+}
 
 const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [showAddWorkout, setShowAddWorkout] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [workoutSets, setWorkoutSets] = useState<WorkoutSet[]>([]);
+  const [showAddSet, setShowAddSet] = useState(false);
 
   // Load workouts from localStorage on component mount
   useEffect(() => {
     const savedWorkouts = localStorage.getItem('workouts');
     if (savedWorkouts) {
-      setWorkouts(JSON.parse(savedWorkouts));
+      try {
+        const parsed = JSON.parse(savedWorkouts);
+        setWorkouts(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setWorkouts([]);
+      }
     }
   }, []);
 
@@ -30,62 +52,77 @@ const Dashboard = () => {
     localStorage.setItem('workouts', JSON.stringify(workouts));
   }, [workouts]);
 
-  const addWorkout = (workoutData: Omit<Workout, 'id' | 'timestamp'>) => {
-    const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-    
-    // Check if there's already a workout for this date
-    const existingWorkoutIndex = workouts.findIndex(workout => workout.date === selectedDateString);
-    
-    if (existingWorkoutIndex !== -1) {
-      // Merge with existing workout, grouping by muscle group and exercise
-      const existingWorkout = workouts[existingWorkoutIndex];
-      const mergedSets = [...existingWorkout.exerciseSets, ...workoutData.exerciseSets];
-      
-      const updatedWorkout = {
-        ...existingWorkout,
-        exerciseSets: mergedSets
-      };
-      
-      setWorkouts(prev => prev.map((workout, index) => 
-        index === existingWorkoutIndex ? updatedWorkout : workout
-      ));
-    } else {
-      // Create new workout
-      const newWorkout: Workout = {
-        ...workoutData,
-        id: crypto.randomUUID(),
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId(data.session?.user.id || null);
+    });
+  }, []);
+
+  // Fetch all sets for the user and selected date from 'workouts' table
+  useEffect(() => {
+    if (!userId) return;
+    const fetchSets = async () => {
+      const { data, error } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', format(selectedDate, 'yyyy-MM-dd'));
+      setWorkoutSets(Array.isArray(data) ? data : []);
+    };
+    fetchSets();
+  }, [userId, selectedDate]);
+
+  // Add a new set as a row in 'workouts' table
+  const addWorkoutSet = async (setData: { exerciseName: string; muscleGroup: string; weight: number; reps: number; }) => {
+    if (!userId) return;
+    const newSet: WorkoutSet = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      data: {
+        ...setData,
         timestamp: Date.now(),
-      };
-      setWorkouts(prev => [...prev, newWorkout]);
+      },
+    };
+    const { error } = await supabase.from('workouts').insert(newSet);
+    if (error) {
+      console.error('Supabase insert error:', error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      setWorkoutSets(prev => Array.isArray(prev) ? [...prev, newSet] : [newSet]);
+      toast({ title: 'Set Added!', description: 'Your set has been saved.' });
     }
-    
-    setShowAddWorkout(false);
-    toast({
-      title: "Workout Added!",
-      description: "Your workout has been saved successfully.",
-    });
   };
 
-  const updateWorkout = (updatedWorkout: Workout) => {
-    setWorkouts(prev => prev.map(workout => 
-      workout.id === updatedWorkout.id ? updatedWorkout : workout
-    ));
-    toast({
-      title: "Workout Updated!",
-      description: "Your changes have been saved.",
-    });
+  // Update a set in 'workouts' table
+  const updateWorkoutSet = async (updatedSet: WorkoutSet) => {
+    await supabase.from('workouts').update(updatedSet).eq('id', updatedSet.id);
+    setWorkoutSets(prev => prev.map(set => set.id === updatedSet.id ? updatedSet : set));
+    toast({ title: 'Set Updated!', description: 'Your changes have been saved.' });
   };
 
-  const deleteWorkout = (id: string) => {
-    setWorkouts(prev => prev.filter(workout => workout.id !== id));
-    toast({
-      title: "Workout Deleted",
-      description: "Workout has been removed from your history.",
-    });
+  // Delete a set from 'workouts' table
+  const deleteWorkoutSet = async (id: string) => {
+    await supabase.from('workouts').delete().eq('id', id);
+    setWorkoutSets(prev => prev.filter(set => set.id !== id));
+    toast({ title: 'Set Deleted', description: 'Set has been removed.' });
   };
 
-  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-  const todaysWorkouts = workouts.filter(workout => workout.date === selectedDateString);
+  // Group sets by muscle group, ordered by first timestamp
+  const groupedByMuscle = React.useMemo(() => {
+    const groups: Record<string, WorkoutSet[]> = {};
+    workoutSets.forEach(set => {
+      const mg = set.data.muscleGroup;
+      if (!groups[mg]) groups[mg] = [];
+      groups[mg].push(set);
+    });
+    // Sort sets within each group by timestamp
+    Object.values(groups).forEach(arr => arr.sort((a, b) => a.data.timestamp - b.data.timestamp));
+    // Sort muscle groups by the timestamp of their first set
+    return Object.entries(groups)
+      .sort(([, a], [, b]) => a[0].data.timestamp - b[0].data.timestamp)
+      .map(([muscleGroup, sets]) => ({ muscleGroup, sets }));
+  }, [workoutSets]);
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -128,50 +165,62 @@ const Dashboard = () => {
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
         <CardContent className="p-4 text-center">
           <p className="text-lg font-semibold text-gray-800">
-            Workouts for {format(selectedDate, "MMM dd, yyyy")}
+            Sets for {format(selectedDate, "MMM dd, yyyy")}
           </p>
         </CardContent>
       </Card>
 
-      {/* Add Workout Button */}
+      {/* Add Set Button */}
       <div className="flex justify-center">
         <Button
-          onClick={() => setShowAddWorkout(true)}
+          onClick={() => setShowAddSet(true)}
           className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-2xl shadow-lg transform transition-all duration-200 hover:scale-105"
         >
           <Plus className="mr-2 h-5 w-5" />
-          Add Workout
+          Add Set
         </Button>
       </div>
 
-      {/* Today's Workouts */}
-      {todaysWorkouts.length === 0 ? (
+      {/* Sets Display or Empty State */}
+      {groupedByMuscle.length === 0 ? (
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
           <CardContent className="text-center py-8 text-gray-500">
             <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No workouts recorded for this day</p>
-            <p className="text-sm mt-1">Tap "Add Workout" to get started!</p>
+            <p>No sets recorded for this day</p>
+            <p className="text-sm mt-1">Tap "Add Set" to get started!</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {todaysWorkouts.map((workout) => (
-            <WorkoutCard
-              key={workout.id}
-              workout={workout}
-              onDelete={deleteWorkout}
-              onUpdate={updateWorkout}
-            />
-          ))}
-        </div>
+        groupedByMuscle.map(group => (
+          <Card key={group.muscleGroup} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg mb-4">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xl font-bold text-purple-600">{group.muscleGroup}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {group.sets.map(set => (
+                <div key={set.id} className="flex items-center justify-between p-2 bg-gray-50 rounded mb-2">
+                  <div>
+                    <span className="font-semibold text-gray-800">{set.data.exerciseName}</span>
+                    <span className="ml-2 text-gray-500">(Weight: {set.data.weight}, Reps: {set.data.reps})</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => updateWorkoutSet({ ...set, /* open edit modal here */ })}>Edit</Button>
+                    <Button size="sm" variant="destructive" onClick={() => deleteWorkoutSet(set.id)}>Delete</Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))
       )}
 
       {/* Voice Recorder Modal */}
-      {showAddWorkout && (
+      {showAddSet && (
         <VoiceRecorder
           selectedDate={selectedDate}
-          onSave={addWorkout}
-          onClose={() => setShowAddWorkout(false)}
+          onSave={addWorkoutSet}
+          onClose={() => setShowAddSet(false)}
+          userId={userId}
         />
       )}
     </div>

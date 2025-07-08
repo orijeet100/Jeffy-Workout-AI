@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/client';
 
 const defaultExercises = {
   Chest: [
@@ -44,26 +44,59 @@ const ExerciseKnowledge = () => {
   const [newMuscleGroup, setNewMuscleGroup] = useState('');
   const [newExercise, setNewExercise] = useState('');
   const [showAddMuscleGroup, setShowAddMuscleGroup] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Load exercises from localStorage on component mount
+  // Get the current user's ID from Supabase session
   useEffect(() => {
-    const savedExercises = localStorage.getItem('exerciseKnowledge');
-    if (savedExercises) {
-      setExercises(JSON.parse(savedExercises));
-    }
+    const session = supabase.auth.getSession().then(({ data }) => {
+      const id = data.session?.user.id;
+      setUserId(id || null);
+    });
   }, []);
 
-  // Save exercises to localStorage whenever exercises change
+  // Fetch or create the user's exercise knowledge base
   useEffect(() => {
-    localStorage.setItem('exerciseKnowledge', JSON.stringify(exercises));
-  }, [exercises]);
+    if (!userId) return;
+    const fetchOrCreateKnowledge = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('exercise_knowledge')
+        .select('data')
+        .eq('user_id', userId)
+        .single();
+      if (data && data.data) {
+        setExercises(data.data);
+      } else {
+        // Insert default for new user
+        await supabase.from('exercise_knowledge').insert({
+          user_id: userId,
+          data: defaultExercises,
+        });
+        setExercises(defaultExercises);
+      }
+      setLoading(false);
+    };
+    fetchOrCreateKnowledge();
+  }, [userId]);
 
-  const addMuscleGroup = () => {
+  // Update Supabase on any change
+  const updateKnowledge = async (newExercises: Record<string, string[]>) => {
+    setExercises(newExercises);
+    if (!userId) return;
+    await supabase
+      .from('exercise_knowledge')
+      .update({ data: newExercises })
+      .eq('user_id', userId);
+  };
+
+  const addMuscleGroup = async () => {
     if (newMuscleGroup.trim() && !exercises[newMuscleGroup]) {
-      setExercises(prev => ({
-        ...prev,
+      const updated = {
+        ...exercises,
         [newMuscleGroup]: []
-      }));
+      };
+      await updateKnowledge(updated);
       setNewMuscleGroup('');
       setShowAddMuscleGroup(false);
       toast({
@@ -73,22 +106,23 @@ const ExerciseKnowledge = () => {
     }
   };
 
-  const deleteMuscleGroup = (muscleGroup: string) => {
-    const updatedExercises = { ...exercises };
-    delete updatedExercises[muscleGroup];
-    setExercises(updatedExercises);
+  const deleteMuscleGroup = async (muscleGroup: string) => {
+    const updated = { ...exercises };
+    delete updated[muscleGroup];
+    await updateKnowledge(updated);
     toast({
       title: "Muscle Group Deleted",
       description: `${muscleGroup} has been removed from your exercise knowledge.`,
     });
   };
 
-  const addExercise = (muscleGroup: string) => {
+  const addExercise = async (muscleGroup: string) => {
     if (newExercise.trim()) {
-      setExercises(prev => ({
-        ...prev,
-        [muscleGroup]: [...prev[muscleGroup], newExercise]
-      }));
+      const updated = {
+        ...exercises,
+        [muscleGroup]: [...exercises[muscleGroup], newExercise]
+      };
+      await updateKnowledge(updated);
       setNewExercise('');
       setEditingMuscleGroup(null);
       toast({
@@ -98,16 +132,21 @@ const ExerciseKnowledge = () => {
     }
   };
 
-  const deleteExercise = (muscleGroup: string, exerciseIndex: number) => {
-    setExercises(prev => ({
-      ...prev,
-      [muscleGroup]: prev[muscleGroup].filter((_, index) => index !== exerciseIndex)
-    }));
+  const deleteExercise = async (muscleGroup: string, exerciseIndex: number) => {
+    const updated = {
+      ...exercises,
+      [muscleGroup]: exercises[muscleGroup].filter((_, index) => index !== exerciseIndex)
+    };
+    await updateKnowledge(updated);
     toast({
       title: "Exercise Deleted",
       description: "Exercise has been removed.",
     });
   };
+
+  if (loading) {
+    return <div className="text-center py-10 text-lg">Loading your exercise knowledge...</div>;
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -188,7 +227,6 @@ const ExerciseKnowledge = () => {
                     )}
                   </div>
                 ))}
-                
                 {editingMuscleGroup === muscleGroup && (
                   <div className="flex gap-2 mt-2">
                     <Input
@@ -198,7 +236,7 @@ const ExerciseKnowledge = () => {
                       onKeyPress={(e) => e.key === 'Enter' && addExercise(muscleGroup)}
                     />
                     <Button onClick={() => addExercise(muscleGroup)} size="sm">
-                      <Plus className="h-4 w-4" />
+                      <Save className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
