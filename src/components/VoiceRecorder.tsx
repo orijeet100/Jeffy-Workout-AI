@@ -12,7 +12,7 @@ import { WorkoutSet } from '@/pages/Dashboard';
 
 interface VoiceRecorderProps {
   selectedDate: Date;
-  onSave: (set: { exerciseName: string; muscleGroup: string; weight: number; reps: number; }) => Promise<void>;
+  onSave: (sets: { exerciseName: string; muscleGroup: string; weight: number; reps: number; }[]) => Promise<void>;
   onClose: () => void;
   userId: string;
 }
@@ -28,6 +28,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
   
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -43,6 +44,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
 
   // Valid muscle groups for mapping
   const VALID_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Biceps', 'Triceps', 'Shoulders', 'Abs'];
+
+  // Add this line to detect browser support for speech recognition
+  const isSpeechRecognitionSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
   useEffect(() => {
     // Initialize speech recognition
@@ -293,7 +297,7 @@ ${JSON.stringify(userKnowledge, null, 2)}
   - "weight": number, e.g., 185 (no units, no text, just a number)
   - "reps": number, e.g., 8 (just a number)
 - Only use muscle groups and exercises from the user's knowledge base above. Do not invent or suggest any others.
-- If any field is missing, make a reasonable guess or use 0 for weight/reps if unknown.
+- If any field is missing, make a reasonable guess or use 0 for weight if unknown and 10 for reps if unknown.
 - Return only valid JSON, no markdown, no extra text.
 
 **EXAMPLE OUTPUT:**
@@ -400,19 +404,10 @@ Return only valid JSON matching the example structure above.`;
   };
 
   const handleSave = async () => {
-    if (exerciseSets.length === 0) {
-      toast({
-        title: "No Exercise Sets",
-        description: "Please add at least one exercise set.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const validSets = exerciseSets.filter(set =>
       set.exerciseName.trim() &&
       set.muscleGroup.trim() &&
-      typeof set.weight === 'number' && set.weight > 0 &&
+      typeof set.weight === 'number' && set.weight >= 0 &&
       typeof set.reps === 'number' && set.reps > 0
     );
 
@@ -425,10 +420,7 @@ Return only valid JSON matching the example structure above.`;
       return;
     }
 
-    for (const set of validSets) {
-      const { exerciseName, muscleGroup, weight, reps } = set;
-      await onSave({ exerciseName, muscleGroup, weight, reps });
-    }
+    await onSave(validSets.map(({ exerciseName, muscleGroup, weight, reps }) => ({ exerciseName, muscleGroup, weight, reps })));
 
     toast({
       title: "Sets Saved!",
@@ -438,56 +430,49 @@ Return only valid JSON matching the example structure above.`;
     onClose();
   };
 
-  // Initialize with one empty set if none exist
+  // Single initialization effect
   useEffect(() => {
-    if (exerciseSets.length === 0) {
-      addNewSet();
-    }
-  }, []);
-
-  // Check if speech recognition is supported
-  const isSpeechRecognitionSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
-
-  useEffect(() => {
-    if (!userId) return;
-    const fetchOrCreateKnowledge = async () => {
+    let isMounted = true;
+    const init = async () => {
       setLoading(true);
-      setError(null);
-      const { data, error } = await supabase
-        .from('exercise_knowledge')
-        .select('data')
-        .eq('user_id', userId)
-        .single();
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-        setError('Failed to load your exercise knowledge.');
+      setIsReady(false);
+      if (!userId) {
+        setExerciseSets([createEmptySet()]);
+        setIsReady(true);
         setLoading(false);
         return;
       }
-      if (data && data.data) {
-        setExerciseSets(data.data);
-      } else {
-        // Insert default for new user
-        const { error: insertError } = await supabase.from('exercise_knowledge').insert({
-          user_id: userId,
-          data: [],
-        });
-        if (insertError) {
-          setError('Failed to create your exercise knowledge.');
+      try {
+        const { data, error } = await supabase
+          .from('exercise_knowledge')
+          .select('data')
+          .eq('user_id', userId)
+          .single();
+        if (error && error.code !== 'PGRST116') {
+          setError('Failed to load your exercise knowledge.');
+          setExerciseSets([createEmptySet()]);
+        } else if (data && Array.isArray(data.data) && data.data.length > 0) {
+          setExerciseSets(data.data);
         } else {
-          setExerciseSets([]);
+          // Insert default for new user
+          await supabase.from('exercise_knowledge').insert({
+            user_id: userId,
+            data: [createEmptySet()],
+          });
+          setExerciseSets([createEmptySet()]);
         }
+      } catch (e) {
+        setError('Failed to initialize exercise sets.');
+        setExerciseSets([createEmptySet()]);
       }
-      setLoading(false);
+      if (isMounted) {
+        setIsReady(true);
+        setLoading(false);
+      }
     };
-    fetchOrCreateKnowledge();
+    init();
+    return () => { isMounted = false; };
   }, [userId]);
-
-  // Defensive initialization on mount
-  useEffect(() => {
-    if (!Array.isArray(exerciseSets) || exerciseSets.length === 0) {
-      setExerciseSets([createEmptySet()]);
-    }
-  }, []);
 
   useEffect(() => {
     const savedWorkouts = localStorage.getItem('workouts');
@@ -500,6 +485,14 @@ Return only valid JSON matching the example structure above.`;
       }
     }
   }, []);
+
+  if (!isReady) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <span className="text-lg text-gray-500">Loading...</span>
+      </div>
+    );
+  }
 
   if (!userId) {
     return <div className="text-center py-10 text-lg">Loading user session...</div>;
@@ -533,15 +526,27 @@ Return only valid JSON matching the example structure above.`;
         </CardHeader>
         
         <CardContent className="p-6 space-y-6">
-          <VoiceRecordingControls
-            isRecording={isRecording}
-            isProcessing={isProcessing}
-            recordingTime={recordingTime}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            errorMessage={errorMessage}
+          <div className="flex flex-col items-center gap-4">
+            <VoiceRecordingControls
+              isRecording={isRecording}
+              isProcessing={isProcessing}
+              recordingTime={recordingTime}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              errorMessage={errorMessage}
+            />
+            {!isRecording && (
+              <span className="mt-2 text-sm text-gray-500 text-center max-w-xs">
+                Speak about the exercises after pressing this button and press stop when done.
+              </span>
+            )}
+          </div>
+          <ExerciseSetForm
+            exerciseSets={Array.isArray(exerciseSets) ? exerciseSets : []}
+            onUpdateSet={updateSet}
+            onDeleteSet={deleteSet}
+            onAddNewSet={addNewSet}
           />
-
           {/* Speech Recognition Status */}
           {!isSpeechRecognitionSupported && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
@@ -561,23 +566,16 @@ Return only valid JSON matching the example structure above.`;
           )}
 
           {/* Transcript Display */}
-          {(transcript || isTranscribing) && (
+          {isTranscribing && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-medium text-blue-800 mb-2">
-                {isTranscribing ? "Transcribing..." : "What you said:"}
+                Transcribing...
               </h4>
               <p className="text-blue-700 text-sm whitespace-pre-wrap">
-                {transcript || (isTranscribing ? "Listening..." : "")}
+                Listening...
               </p>
             </div>
           )}
-
-          <ExerciseSetForm
-            exerciseSets={Array.isArray(exerciseSets) ? exerciseSets : []}
-            onUpdateSet={updateSet}
-            onDeleteSet={deleteSet}
-            onAddNewSet={addNewSet}
-          />
 
           <div className="flex gap-3 pt-4">
             <Button

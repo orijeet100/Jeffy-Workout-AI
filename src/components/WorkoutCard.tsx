@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,7 +49,7 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, onDelete, onUpdate }
     );
 
     const validEditingSets = editingSets.filter(set => 
-      set.exerciseName.trim() && set.weight.trim() && set.reps > 0
+      set.exerciseName.trim() && set.weight > 0 && set.reps > 0
     );
 
     const updatedWorkout = {
@@ -94,7 +93,7 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, onDelete, onUpdate }
       id: crypto.randomUUID(),
       exerciseName,
       muscleGroup,
-      weight: '',
+      weight: 0,
       reps: 0
     };
     setEditingSets(prev => [...prev, newSet]);
@@ -102,6 +101,19 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, onDelete, onUpdate }
 
   const removeSetFromEditing = (setId: string) => {
     setEditingSets(prev => prev.filter(set => set.id !== setId));
+  };
+
+  const addWorkoutSet = (newSet: ExerciseSet) => {
+    if (!onUpdate) return;
+
+    const updatedWorkout = {
+      ...workout,
+      exerciseSets: [...workout.exerciseSets, newSet]
+    };
+
+    onUpdate(updatedWorkout);
+    setEditingExercise(null);
+    setEditingSets([]);
   };
 
   return (
@@ -203,7 +215,6 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, onDelete, onUpdate }
                             variant="outline"
                             size="sm"
                             onClick={() => addNewSetToEditing(muscleGroup, exerciseName)}
-                            className="flex-1"
                           >
                             <Plus className="h-4 w-4 mr-2" />
                             Add Set
@@ -213,13 +224,11 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, onDelete, onUpdate }
                           <Button
                             variant="outline"
                             onClick={handleCancelEdit}
-                            className="flex-1"
                           >
                             Cancel
                           </Button>
                           <Button
                             onClick={handleSaveExercise}
-                            className="flex-1"
                           >
                             <Save className="h-4 w-4 mr-2" />
                             Save

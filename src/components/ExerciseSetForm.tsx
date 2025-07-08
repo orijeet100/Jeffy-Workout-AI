@@ -75,8 +75,15 @@ const ExerciseSetForm: React.FC<ExerciseSetFormProps> = ({
                 <Input
                   id={`weight-${set.id}`}
                   type="number"
-                  value={set.weight || ''}
-                  onChange={(e) => onUpdateSet(set.id, 'weight', Number(e.target.value))}
+                  value={set.weight === undefined || set.weight === null ? '' : String(set.weight)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      onUpdateSet(set.id, 'weight', '');
+                    } else {
+                      onUpdateSet(set.id, 'weight', Number(val));
+                    }
+                  }}
                   placeholder="e.g., 185"
                   min="0"
                 />
