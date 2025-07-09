@@ -12,7 +12,17 @@
 [![Supabase](https://img.shields.io/badge/Supabase-2.50.3-green.svg)](https://supabase.com/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.11-38B2AC.svg)](https://tailwindcss.com/)
 
-[Live Demo](https://jeffy-ai.netlify.app) • [Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)
+</div>
+
+---
+
+<div align="center">
+
+## 🚀 **Try Jeffy AI Now - It's Free and still in prototyping phase!**
+
+**[🌐 Visit Website](https://jeffy-ai.netlify.app)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
+
+*Experience the future of workout tracking with AI-powered voice recognition*
 
 </div>
 
