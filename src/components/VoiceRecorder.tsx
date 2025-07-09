@@ -268,7 +268,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
 
       toast({
         title: "Recording Started",
-        description: "Speak clearly. Recording will auto-stop after 4 seconds of silence or 3 minutes.",
+        description: "Speak clearly. Recording will auto-stop after 20 seconds of silence",
       });
     } catch (error) {
       console.error('Recording error:', error);
