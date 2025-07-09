@@ -73,9 +73,9 @@ const Auth = ({ onAuth, showAuthError }: AuthProps) => {
       <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-0 shadow-lg">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Dumbbell className="h-8 w-8 text-purple-600" />
+            <img src="/logo.png" alt="Jeffy AI logo" height={40} className="h-10 w-10" />
             <CardTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              FitTracker Pro
+              Jeffy AI
             </CardTitle>
           </div>
           <p className="text-gray-600">

@@ -1,5 +1,5 @@
 
-import { Home, Book, LogOut } from "lucide-react";
+import { Home, Book, LogOut, Info } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 import {
@@ -17,6 +17,7 @@ import {
 const items = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Exercise Knowledge", url: "/exercises", icon: Book },
+  { title: "Info", url: "/info", icon: Info },
 ];
 
 interface AppSidebarProps {
@@ -25,7 +26,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ user, onLogout }: AppSidebarProps) {
-  const { state } = useSidebar();
+  const { state, closeSidebar } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -43,7 +44,11 @@ export function AppSidebar({ user, onLogout }: AppSidebarProps) {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={getNavCls}>
+                    <NavLink
+                      to={item.url}
+                      className={getNavCls}
+                      onClick={closeSidebar}
+                    >
                       <item.icon className="mr-2 h-4 w-4" />
                       {state !== "collapsed" && <span>{item.title}</span>}
                     </NavLink>

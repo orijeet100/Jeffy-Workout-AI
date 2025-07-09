@@ -104,7 +104,7 @@ const Index = () => {
         <div className="max-w-md mx-auto">
           <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
             <Dumbbell className="h-6 w-6" />
-            FitTracker Pro
+            Jeffy AI
           </h1>
           <p className="text-purple-100">Track your workout sets with voice</p>
         </div>

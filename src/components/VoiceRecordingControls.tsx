@@ -52,7 +52,7 @@ const VoiceRecordingControls: React.FC<VoiceRecordingControlsProps> = ({
       {isRecording && (
         <div className="text-center">
           <p className="text-red-600 font-semibold">Recording: {formatTime(recordingTime)}</p>
-          <p className="text-sm text-gray-500">Describe your exercises, weights, and reps</p>
+          <p className="text-sm text-gray-500">Describe your exercises, weights, and reps (max 3 minutes)</p>
         </div>
       )}
       

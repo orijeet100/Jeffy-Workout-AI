@@ -10,6 +10,7 @@ import ExerciseKnowledge from "./pages/ExerciseKnowledge";
 import Layout from "./components/Layout";
 import NotFound from "./pages/NotFound";
 import { supabase } from './integrations/client';
+import Info from './pages/Info';
 
 const queryClient = new QueryClient();
 
@@ -95,6 +96,7 @@ const App = () => {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/exercises" element={<ExerciseKnowledge />} />
+              <Route path="/info" element={<Info />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>

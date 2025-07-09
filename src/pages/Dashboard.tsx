@@ -11,6 +11,8 @@ import VoiceRecorder from '@/components/VoiceRecorder';
 import { Workout } from '@/types/workout';
 import { supabase } from '@/integrations/client';
 import { Input } from '@/components/ui/input';
+// Import defaultExercises from ExerciseKnowledge
+import { defaultExercises } from '@/constants/defaultExercises';
 
 // Rename ExerciseSetRow to WorkoutSet for clarity
 export interface WorkoutSet {
@@ -129,14 +131,14 @@ const Dashboard = () => {
     Object.values(groups).forEach(exGroups => {
       Object.values(exGroups).forEach(arr => arr.sort((a, b) => a.data.timestamp - b.data.timestamp));
     });
-    // Sort muscle groups by the timestamp of their first set
-    const sortedMuscleGroups = Object.entries(groups)
-      .sort(([, exGroupsA], [, exGroupsB]) => {
-        const firstA = Object.values(exGroupsA)[0]?.[0]?.data.timestamp || 0;
-        const firstB = Object.values(exGroupsB)[0]?.[0]?.data.timestamp || 0;
-        return firstA - firstB;
-      });
-    return sortedMuscleGroups.map(([muscleGroup, exercises]) => ({ muscleGroup, exercises }));
+    // Order muscle groups by defaultExercises order, then any others
+    const defaultOrder = Object.keys(defaultExercises);
+    const allMuscleGroups = Object.keys(groups);
+    const orderedMuscleGroups = [
+      ...defaultOrder.filter(mg => allMuscleGroups.includes(mg)),
+      ...allMuscleGroups.filter(mg => !defaultOrder.includes(mg)),
+    ];
+    return orderedMuscleGroups.map(muscleGroup => ({ muscleGroup, exercises: groups[muscleGroup] }));
   }, [workoutSets]);
 
   return (
@@ -180,7 +182,7 @@ const Dashboard = () => {
       <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
         <CardContent className="p-4 text-center">
           <p className="text-lg font-semibold text-gray-800">
-            Sets for {format(selectedDate, "MMM dd, yyyy")}
+            Workout for {format(selectedDate, "MMM dd, yyyy")}
           </p>
         </CardContent>
       </Card>

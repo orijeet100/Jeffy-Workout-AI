@@ -19,6 +19,8 @@ interface VoiceRecorderProps {
 
 const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date(), onSave, onClose, userId }) => {
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(isRecording);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exerciseSets, setExerciseSets] = useState<ExerciseSet[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -36,63 +38,67 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
   const audioContext = useRef<AudioContext | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
   const microphone = useRef<MediaStreamAudioSourceNode | null>(null);
-  const recognition = useRef<any>(null);
+  // const recognition = useRef<any>(null); // Removed browser speech recognition
 
-  // OpenAI API configuration - Use import.meta.env for Vite
+  // Remove browser speech recognition and OpenAI API config
+  // Add Deepgram API config
+  const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || '';
+  const DEEPGRAM_API_URL = 'https://api.deepgram.com/v1/listen';
+
+  // Restore OpenAI API configuration for prompt extraction
   const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || 'your-api-key-here';
   const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
   // Valid muscle groups for mapping
   const VALID_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Biceps', 'Triceps', 'Shoulders', 'Abs'];
 
-  // Add this line to detect browser support for speech recognition
-  const isSpeechRecognitionSupported = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
-
+  // Remove recognition, isSpeechRecognitionSupported, and related useEffect
+  // Add silence detection useEffect
   useEffect(() => {
     // Initialize speech recognition
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
-    if (SpeechRecognition) {
-      recognition.current = new SpeechRecognition();
-      recognition.current.continuous = true;
-      recognition.current.interimResults = true;
-      recognition.current.lang = 'en-US';
+    // if (SpeechRecognition) {
+    //   recognition.current = new SpeechRecognition();
+    //   recognition.current.continuous = true;
+    //   recognition.current.interimResults = true;
+    //   recognition.current.lang = 'en-US';
       
-      recognition.current.onresult = (event: any) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
+    //   recognition.current.onresult = (event: any) => {
+    //     let finalTranscript = '';
+    //     let interimTranscript = '';
         
-        // Process all results to get the complete transcript
-        for (let i = 0; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-          } else {
-            interimTranscript += transcript;
-          }
-        }
+    //     // Process all results to get the complete transcript
+    //     for (let i = 0; i < event.results.length; i++) {
+    //       const transcript = event.results[i][0].transcript;
+    //       if (event.results[i].isFinal) {
+    //         finalTranscript += transcript + ' ';
+    //       } else {
+    //         interimTranscript += transcript;
+    //       }
+    //     }
         
-        // Only show final results + current interim
-        setTranscript(finalTranscript + (interimTranscript ? interimTranscript : ''));
-      };
+    //     // Only show final results + current interim
+    //     setTranscript(finalTranscript + (interimTranscript ? interimTranscript : ''));
+    //   };
       
-      recognition.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'no-speech') {
-          return;
-        }
-        setErrorMessage(`Speech recognition error: ${event.error}`);
-      };
+    //   recognition.current.onerror = (event: any) => {
+    //     console.error('Speech recognition error:', event.error);
+    //     if (event.error === 'no-speech') {
+    //       return;
+    //     }
+    //     setErrorMessage(`Speech recognition error: ${event.error}`);
+    //   };
       
-      recognition.current.onstart = () => {
-        setIsTranscribing(true);
-        setTranscript('');
-      };
+    //   recognition.current.onstart = () => {
+    //     setIsTranscribing(true);
+    //     setTranscript('');
+    //   };
       
-      recognition.current.onend = () => {
-        setIsTranscribing(false);
-      };
-    }
+    //   recognition.current.onend = () => {
+    //     setIsTranscribing(false);
+    //   };
+    // }
     
     return () => {
       if (recordingInterval.current) {
@@ -104,9 +110,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
       if (audioContext.current) {
         audioContext.current.close();
       }
-      if (recognition.current) {
-        recognition.current.stop();
-      }
+      // if (recognition.current) { // Removed browser speech recognition
+      //   recognition.current.stop();
+      // }
     };
   }, []);
 
@@ -130,6 +136,8 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
     setExerciseSets(prev => Array.isArray(prev) ? prev.filter(set => set.id !== id) : []);
   };
 
+  
+
   const detectSilence = (stream: MediaStream) => {
     try {
       audioContext.current = new AudioContext();
@@ -151,14 +159,14 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
         if (average < 20) {
           if (!silenceTimeout.current) {
             silenceTimeout.current = setTimeout(() => {
-              if (isRecording) {
+              if (isRecordingRef.current) {
                 stopRecording();
                 toast({
                   title: "Recording Stopped",
-                  description: "No voice detected for 4 seconds.",
+                  description: "No voice detected for 20 seconds.",
                 });
               }
-            }, 4000);
+            }, 20000); // 20 seconds
           }
         } else {
           if (silenceTimeout.current) {
@@ -167,7 +175,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
           }
         }
         
-        if (isRecording) {
+        if (isRecordingRef.current) {
           requestAnimationFrame(checkAudioLevel);
         }
       };
@@ -178,48 +186,89 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
     }
   };
 
+  const MAX_RECORDING_SECONDS = 180; // 3 minutes
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder.current = new MediaRecorder(stream);
-      
+
       const chunks: Blob[] = [];
       mediaRecorder.current.ondataavailable = (event) => {
         chunks.push(event.data);
       };
-      
-      mediaRecorder.current.onstop = () => {
+
+      mediaRecorder.current.onstop = async () => {
+        console.log('mediaRecorder onstop fired');
+        setIsRecording(false);
         stream.getTracks().forEach(track => track.stop());
         if (audioContext.current) {
           audioContext.current.close();
         }
+        // When recording stops, send audio to Deepgram
+        setIsTranscribing(true);
+        setTranscript('');
+        setErrorMessage('');
+        try {
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'recording.webm');
+          // Deepgram expects the audio as the request body, not multipart
+          // So we use fetch with the blob directly
+          const response = await fetch(DEEPGRAM_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+              'Content-Type': 'audio/webm',
+              'Accept': 'application/json',
+            },
+            body: audioBlob,
+          });
+          if (!response.ok) {
+            throw new Error(`Deepgram API error: ${response.status}`);
+          }
+          const data = await response.json();
+          const dgTranscript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+          setTranscript(dgTranscript);
+          setIsTranscribing(false);
+          // Proceed to OpenAI extraction if transcript is present
+          setTimeout(() => {
+            processWorkoutWithOpenAI(dgTranscript);
+          }, 500);
+        } catch (err) {
+          setIsTranscribing(false);
+          setErrorMessage('Transcription failed. Please try again.');
+          setTranscript('');
+        }
       };
-      
+
       mediaRecorder.current.start();
       setIsRecording(true);
       setRecordingTime(0);
       setErrorMessage('');
       setTranscript('');
-      
-      // Start speech recognition
-      if (recognition.current) {
-        try {
-          recognition.current.start();
-        } catch (error) {
-          console.error('Speech recognition start error:', error);
-        }
-      }
-      
+
       // Start silence detection
       detectSilence(stream);
-      
+
+      // Start recording timer
       recordingInterval.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          if (prev + 1 >= MAX_RECORDING_SECONDS && isRecordingRef.current) {
+            stopRecording();
+            toast({
+              title: "Recording Stopped",
+              description: "Recording automatically stopped after 3 minutes.",
+            });
+            return prev + 1;
+          }
+          return prev + 1;
+        });
       }, 1000);
-      
+
       toast({
         title: "Recording Started",
-        description: "Speak clearly. Recording will auto-stop after 4 seconds of silence.",
+        description: "Speak clearly. Recording will auto-stop after 4 seconds of silence or 3 minutes.",
       });
     } catch (error) {
       console.error('Recording error:', error);
@@ -232,44 +281,32 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ selectedDate = new Date()
   };
 
   const stopRecording = () => {
-    if (mediaRecorder.current && isRecording) {
+    // Prevent multiple calls
+    if (!isRecordingRef.current) return;
+    console.log('stopRecording called');
+    setIsRecording(false);
+    if (mediaRecorder.current) {
       mediaRecorder.current.stop();
-      setIsRecording(false);
-      
-      if (recordingInterval.current) {
-        clearInterval(recordingInterval.current);
-      }
-      if (silenceTimeout.current) {
-        clearTimeout(silenceTimeout.current);
-        silenceTimeout.current = null;
-      }
-      
-      // Stop speech recognition
-      if (recognition.current && isTranscribing) {
-        try {
-          recognition.current.stop();
-        } catch (error) {
-          console.error('Speech recognition stop error:', error);
-        }
-      }
-      
-      toast({
-        title: "Recording Stopped",
-        description: "Processing your voice input...",
-      });
-      
-      // Wait a bit for final speech recognition results
-      setTimeout(() => {
-        processWorkoutWithOpenAI();
-      }, 1000);
     }
+    if (recordingInterval.current) {
+      clearInterval(recordingInterval.current);
+    }
+    if (silenceTimeout.current) {
+      clearTimeout(silenceTimeout.current);
+      silenceTimeout.current = null;
+    }
+    toast({
+      title: "Recording Stopped",
+      description: "Processing your voice input...",
+    });
   };
 
-  const processWorkoutWithOpenAI = async () => {
+  // Accept transcript as argument (for Deepgram)
+  const processWorkoutWithOpenAI = async (dgTranscript?: string) => {
     setIsProcessing(true);
     setErrorMessage('');
-    
-    if (!transcript.trim()) {
+    const finalTranscript = typeof dgTranscript === 'string' ? dgTranscript : transcript;
+    if (!finalTranscript.trim()) {
       setErrorMessage('No speech detected. Please try recording again.');
       setIsProcessing(false);
       return;
@@ -298,12 +335,13 @@ ${JSON.stringify(userKnowledge, null, 2)}
   - "reps": number, e.g., 8 (just a number)
 - Only use muscle groups and exercises from the user's knowledge base above. Do not invent or suggest any others.
 - If any field is missing, make a reasonable guess or use 0 for weight if unknown and 10 for reps if unknown.
+- In the output, give exerciseCount too which is the total number of sets of exercises in the transcript. If user says 2 sets of something and 4 sets of soemthing else so total exerCise counts will be 6.
 - Return only valid JSON, no markdown, no extra text.
 
 **EXAMPLE OUTPUT:**
 {
   "success": true,
-  "exerciseCount": 2,
+  "exerciseCount": 3,
   "sets": [
     {
       "id": "1",
@@ -314,6 +352,13 @@ ${JSON.stringify(userKnowledge, null, 2)}
     },
     {
       "id": "2",
+      "exerciseName": "Bench Press",
+      "muscleGroup": "Chest",
+      "weight": 200,
+      "reps": 6
+    },
+    {
+      "id": "3",
       "exerciseName": "Push-ups",
       "muscleGroup": "Chest",
       "weight": 0,
@@ -330,7 +375,7 @@ If you cannot extract any valid workout data, return:
 }
 
 **TRANSCRIPT TO ANALYZE:**
-"${transcript}"
+"${finalTranscript}"
 
 Return only valid JSON matching the example structure above.`;
 
@@ -535,6 +580,17 @@ Return only valid JSON matching the example structure above.`;
               onStopRecording={stopRecording}
               errorMessage={errorMessage}
             />
+            {/* Transcript Display - moved here, right after mic button */}
+            {(isTranscribing || transcript) && (
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2">
+                <h4 className="font-medium text-blue-800 mb-2">
+                  {isTranscribing ? 'Transcribing...' : 'Transcript'}
+                </h4>
+                <p className="text-blue-700 text-sm whitespace-pre-wrap min-h-[1.5em]">
+                  {transcript || (isTranscribing ? 'Processing your audio...' : '')}
+                </p>
+              </div>
+            )}
             {!isRecording && (
               <span className="mt-2 text-sm text-gray-500 text-center max-w-xs">
                 Speak about the exercises after pressing this button and press stop when done.
@@ -548,34 +604,10 @@ Return only valid JSON matching the example structure above.`;
             onAddNewSet={addNewSet}
           />
           {/* Speech Recognition Status */}
-          {!isSpeechRecognitionSupported && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <p className="text-yellow-800 text-sm">
-                Speech recognition not supported in this browser. Voice recording will work but text won't be transcribed.
-              </p>
-            </div>
-          )}
+          {/* Removed browser speech recognition warnings */}
 
           {/* API Key Warning */}
-          {OPENAI_API_KEY === 'your-api-key-here' && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-800 text-sm">
-                Please set your OpenAI API key in the environment variable VITE_OPENAI_API_KEY
-              </p>
-            </div>
-          )}
-
-          {/* Transcript Display */}
-          {isTranscribing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-800 mb-2">
-                Transcribing...
-              </h4>
-              <p className="text-blue-700 text-sm whitespace-pre-wrap">
-                Listening...
-              </p>
-            </div>
-          )}
+          {/* Removed OpenAI API key warning */}
 
           <div className="flex gap-3 pt-4">
             <Button

@@ -6,37 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/client';
-
-const defaultExercises = {
-  Chest: [
-    'Bench Press', 'Incline Bench Press', 'Decline Bench Press', 'Dumbbell Flyes',
-    'Push-ups', 'Dips', 'Incline Dumbbell Press', 'Cable Crossovers', 'Chest Press Machine', 'Pec Deck'
-  ],
-  Back: [
-    'Pull-ups', 'Chin-ups', 'Deadlifts', 'Bent-over Rows', 'Lat Pulldowns',
-    'T-Bar Rows', 'Cable Rows', 'Single-arm Dumbbell Rows', 'Face Pulls', 'Reverse Flyes'
-  ],
-  Legs: [
-    'Squats', 'Deadlifts', 'Leg Press', 'Lunges', 'Romanian Deadlifts',
-    'Bulgarian Split Squats', 'Leg Curls', 'Leg Extensions', 'Calf Raises', 'Hip Thrusts'
-  ],
-  Biceps: [
-    'Bicep Curls', 'Hammer Curls', 'Preacher Curls', 'Concentration Curls', 'Cable Curls',
-    'Barbell Curls', '21s', 'Incline Dumbbell Curls', 'Reverse Curls', 'Chin-ups'
-  ],
-  Triceps: [
-    'Tricep Dips', 'Close-grip Bench Press', 'Overhead Tricep Extension', 'Tricep Pushdowns',
-    'Diamond Push-ups', 'Skull Crushers', 'Tricep Kickbacks', 'Rope Pushdowns', 'Bench Dips', 'Overhead Dumbbell Extension'
-  ],
-  Shoulders: [
-    'Shoulder Press', 'Lateral Raises', 'Front Raises', 'Rear Delt Flyes', 'Arnold Press',
-    'Upright Rows', 'Shrugs', 'Pike Push-ups', 'Face Pulls', 'Handstand Push-ups'
-  ],
-  Abs: [
-    'Crunches', 'Planks', 'Sit-ups', 'Russian Twists', 'Leg Raises',
-    'Mountain Climbers', 'Bicycle Crunches', 'Dead Bug', 'Ab Wheel Rollouts', 'Hanging Knee Raises'
-  ]
-};
+import { defaultExercises } from '@/constants/defaultExercises';
 
 const ExerciseKnowledge = () => {
   const [exercises, setExercises] = useState<Record<string, string[]>>(defaultExercises);
@@ -144,6 +114,11 @@ const ExerciseKnowledge = () => {
     });
   };
 
+  const muscleGroupOrder = [
+    ...Object.keys(defaultExercises),
+    ...Object.keys(exercises).filter(mg => !Object.keys(defaultExercises).includes(mg))
+  ];
+
   if (loading) {
     return <div className="text-center py-10 text-lg">Loading your exercise knowledge...</div>;
   }
@@ -190,59 +165,64 @@ const ExerciseKnowledge = () => {
       )}
 
       <div className="grid gap-6">
-        {Object.entries(exercises).map(([muscleGroup, exerciseList]) => (
-          <Card key={muscleGroup} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xl font-bold text-purple-600">{muscleGroup}</CardTitle>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingMuscleGroup(editingMuscleGroup === muscleGroup ? null : muscleGroup)}
-                >
-                  <Edit2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => deleteMuscleGroup(muscleGroup)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                {exerciseList.map((exercise, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span>{exercise}</span>
-                    {editingMuscleGroup === muscleGroup && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteExercise(muscleGroup, index)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
+        {muscleGroupOrder.map(muscleGroup => (
+          exercises[muscleGroup] && (
+            <Card key={muscleGroup} className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-xl font-bold text-purple-600">{muscleGroup}</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditingMuscleGroup(editingMuscleGroup === muscleGroup ? null : muscleGroup)}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteMuscleGroup(muscleGroup)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2">
+                  {exercises[muscleGroup].map((exercise, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span>{exercise}</span>
+                      {editingMuscleGroup === muscleGroup && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteExercise(muscleGroup, index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {editingMuscleGroup === muscleGroup && (
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        placeholder="Add exercise"
+                        value={newExercise}
+                        onChange={(e) => setNewExercise(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && addExercise(muscleGroup)}
+                      />
+                      <Button onClick={() => addExercise(muscleGroup)} size="sm">
+                        <Save className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
-                ))}
-                {editingMuscleGroup === muscleGroup && (
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      placeholder="Add new exercise"
-                      value={newExercise}
-                      onChange={(e) => setNewExercise(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addExercise(muscleGroup)}
-                    />
-                    <Button onClick={() => addExercise(muscleGroup)} size="sm">
-                      <Save className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                      <Button onClick={() => setEditingMuscleGroup(null)} variant="outline" size="sm">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )
         ))}
       </div>
     </div>

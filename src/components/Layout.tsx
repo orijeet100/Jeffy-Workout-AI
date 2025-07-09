@@ -18,7 +18,7 @@ const Layout = ({ children, user, onLogout }: LayoutProps) => {
           <header className="h-12 flex items-center border-b bg-white/80 backdrop-blur-sm">
             <SidebarTrigger className="ml-2" />
             <div className="flex-1 text-center">
-              <span className="font-semibold text-gray-800">FitTracker Pro</span>
+              <span className="font-semibold text-gray-800">Jeffy AI</span>
             </div>
           </header>
           <div className="p-4">
