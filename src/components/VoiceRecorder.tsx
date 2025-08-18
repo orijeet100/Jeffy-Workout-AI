@@ -43,7 +43,12 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         const exerciseGroups = await DatabaseService.getExerciseGroups(userId);
         setExerciseLibrary(exerciseGroups);
       } catch (error) {
-        console.error('Error loading exercise library:', error);
+        // Handle load error silently
+        toast({
+          title: 'Error',
+          description: 'Failed to load exercise library',
+          variant: 'destructive',
+        });
       }
     };
 
@@ -106,15 +111,19 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       setIsRecording(true);
       
     } catch (error) {
-      console.error('Error starting recording:', error);
-      setErrorMessage('Failed to access microphone. Please check permissions.');
+      // Handle recording error silently
+      toast({
+        title: "Recording Error",
+        description: "Could not access microphone. Please check permissions.",
+        variant: "destructive",
+      });
     }
   };
 
   const handleStopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    setIsRecording(false);
     }
   };
 
@@ -140,7 +149,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       setShowForm(true);
       
     } catch (error) {
-      console.error('Error processing audio:', error);
+      // Handle processing error silently
       setErrorMessage(error instanceof Error ? error.message : 'Failed to process audio');
     } finally {
       setIsProcessing(false);
@@ -162,7 +171,8 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       return openaiResponse.workoutSets;
       
     } catch (error) {
-      console.error('Error processing with OpenAI:', error);
+      // Handle OpenAI processing error silently
+      setErrorMessage('Failed to process workout with AI. Please try again.');
       // Fallback to simple processing if OpenAI fails
       return await simpleVoiceProcessing(transcriptText, createExerciseContext());
     }
@@ -297,12 +307,17 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     try {
       await onSave(processedSets);
       onClose();
-    } catch (error) {
-      console.error('Error saving workout sets:', error);
+      
       toast({
-        title: 'Error', 
-        description: 'Failed to save workout sets', 
-        variant: 'destructive' 
+        title: 'Success',
+        description: `${processedSets.length} workout set(s) added successfully!`,
+      });
+    } catch (error) {
+      // Handle save error silently
+      toast({
+        title: 'Error',
+        description: 'Failed to save workout sets',
+        variant: 'destructive',
       });
     }
   };

@@ -36,11 +36,11 @@ const ExerciseKnowledge = () => {
   // Load data when user changes
   useEffect(() => {
     if (userId) {
-      loadData();
+      loadExerciseData();
     }
   }, [userId]);
 
-  const loadData = async () => {
+  const loadExerciseData = async () => {
     if (!userId) return;
     
     try {
@@ -54,7 +54,6 @@ const ExerciseKnowledge = () => {
       setExercises(exercisesData);
       setExerciseGroups(exerciseGroupsData);
     } catch (error) {
-      console.error('Error loading exercise data:', error);
       toast({ 
         title: 'Error', 
         description: 'Failed to load exercise data', 
@@ -71,12 +70,11 @@ const ExerciseKnowledge = () => {
       if (newMuscleGroup) {
         toast({ title: 'Success!', description: 'Muscle group added successfully.' });
         setNewMuscleGroupName('');
-        setShowAddMuscleGroup(false);
-        await loadData();
+      setShowAddMuscleGroup(false);
+        await loadExerciseData();
       }
     } catch (error) {
-      console.error('Error adding muscle group:', error);
-      toast({ 
+      toast({
         title: 'Error', 
         description: 'Failed to add muscle group', 
         variant: 'destructive' 
@@ -95,11 +93,10 @@ const ExerciseKnowledge = () => {
         setNewExerciseName('');
         setSelectedMuscleGroup('');
         setShowAddExercise(false);
-        await loadData();
+        await loadExerciseData();
       }
     } catch (error) {
-      console.error('Error adding exercise:', error);
-      toast({ 
+      toast({
         title: 'Error', 
         description: 'Failed to add exercise', 
         variant: 'destructive' 
@@ -117,16 +114,13 @@ const ExerciseKnowledge = () => {
     if (!userId || !editingMuscleGroup || !editMuscleGroupName.trim()) return;
     
     try {
-      const success = await DatabaseService.updateMuscleGroup(userId, editingMuscleGroup.id, editMuscleGroupName.trim());
-      if (success) {
-        toast({ title: 'Updated!', description: 'Muscle group name updated successfully.' });
-        setEditingMuscleGroup(null);
-        setEditMuscleGroupName('');
-        await loadData();
-      }
+      await DatabaseService.updateMuscleGroup(editingMuscleGroup.id, { muscle_group_name: editMuscleGroupName.trim() }, userId);
+      toast({ title: 'Updated!', description: 'Muscle group name updated successfully.' });
+      setEditingMuscleGroup(null);
+      setEditMuscleGroupName('');
+      await loadExerciseData();
     } catch (error) {
-      console.error('Error updating muscle group:', error);
-      toast({ 
+      toast({
         title: 'Error', 
         description: 'Failed to update muscle group', 
         variant: 'destructive' 
@@ -144,15 +138,12 @@ const ExerciseKnowledge = () => {
     if (!userId || !editingExercise || !editExerciseName.trim()) return;
     
     try {
-      const success = await DatabaseService.updateExercise(userId, editingExercise.id, editExerciseName.trim());
-      if (success) {
-        toast({ title: 'Updated!', description: 'Exercise name updated successfully.' });
-        setEditingExercise(null);
-        setEditExerciseName('');
-        await loadData();
-      }
+      await DatabaseService.updateExercise(editingExercise.id, { exercise_name: editExerciseName.trim() }, userId);
+      toast({ title: 'Updated!', description: 'Exercise name updated successfully.' });
+      setEditingExercise(null);
+      setEditExerciseName('');
+      await loadExerciseData();
     } catch (error) {
-      console.error('Error updating exercise:', error);
       toast({ 
         title: 'Error', 
         description: 'Failed to update exercise', 
@@ -167,14 +158,11 @@ const ExerciseKnowledge = () => {
     }
     
     try {
-      const success = await DatabaseService.deleteMuscleGroup(userId!, muscleGroup.id);
-      if (success) {
-        toast({ title: 'Deleted!', description: 'Muscle group and all associated data removed.' });
-        await loadData();
-      }
+      await DatabaseService.deleteMuscleGroup(muscleGroup.id, userId!);
+      toast({ title: 'Deleted!', description: 'Muscle group and all associated data removed.' });
+      await loadExerciseData();
     } catch (error) {
-      console.error('Error deleting muscle group:', error);
-      toast({ 
+      toast({
         title: 'Error', 
         description: 'Failed to delete muscle group', 
         variant: 'destructive' 
@@ -188,16 +176,13 @@ const ExerciseKnowledge = () => {
     }
     
     try {
-      const success = await DatabaseService.deleteExercise(userId!, exercise.id);
-      if (success) {
-        toast({ title: 'Deleted!', description: 'Exercise and all associated workout sets removed.' });
-        await loadData();
-      }
+      await DatabaseService.deleteExercise(exercise.id, userId!);
+      toast({ title: 'Deleted!', description: 'Exercise and all associated workout sets removed.' });
+      await loadExerciseData();
     } catch (error) {
-      console.error('Error deleting exercise:', error);
       toast({ 
         title: 'Error', 
-        description: 'Failed to delete exercise', 
+        description: 'Failed to update exercise', 
         variant: 'destructive' 
       });
     }
@@ -219,22 +204,22 @@ const ExerciseKnowledge = () => {
           Exercise Knowledge
         </h1>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setShowAddMuscleGroup(true)}
+        <Button
+          onClick={() => setShowAddMuscleGroup(true)}
             variant="outline"
             className="border-purple-200 text-purple-700 hover:bg-purple-50"
-          >
+        >
             <Plus className="h-4 w-4 mr-2" />
-            Add Muscle Group
-          </Button>
-          <Button
+          Add Muscle Group
+              </Button>
+              <Button 
             onClick={() => setShowAddExercise(true)}
             className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-          >
+              >
             <Plus className="h-4 w-4 mr-2" />
             Add Exercise
-          </Button>
-        </div>
+              </Button>
+            </div>
       </div>
 
       {/* Exercise Library */}
@@ -246,26 +231,26 @@ const ExerciseKnowledge = () => {
                 <Dumbbell className="h-5 w-5" />
                 {group.muscle_group_name}
               </CardTitle>
-              <div className="flex gap-2">
-                <Button
+                <div className="flex gap-2">
+                  <Button
                   variant="ghost"
-                  size="sm"
+                    size="sm"
                   onClick={() => handleEditMuscleGroup(muscleGroups.find(mg => mg.id === group.muscle_group_id)!)}
                   className="text-blue-500 hover:text-blue-700"
-                >
+                  >
                   <Edit className="h-4 w-4" />
-                </Button>
-                <Button
+                  </Button>
+                  <Button
                   variant="ghost"
-                  size="sm"
+                    size="sm"
                   onClick={() => handleDeleteMuscleGroup(muscleGroups.find(mg => mg.id === group.muscle_group_id)!)}
                   className="text-red-500 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
               {group.exercises.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No exercises in this muscle group</p>
               ) : (
@@ -298,8 +283,8 @@ const ExerciseKnowledge = () => {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
         ))}
       </div>
 

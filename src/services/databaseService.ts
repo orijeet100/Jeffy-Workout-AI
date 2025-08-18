@@ -9,273 +9,371 @@ import {
 } from '@/types/workout';
 
 export class DatabaseService {
-	// Initialize default data for new user
-	static async initializeUserData(userId: string): Promise<void> {
-		try {
-			const { error } = await supabase.rpc('create_default_user_data', {
-				new_user_id: userId
-			});
-			if (error) throw error;
-		} catch (error) {
-			throw error;
-		}
-	}
+  // Initialize default data for new user
+  static async initializeUserData(userId: string): Promise<void> {
+    try {
+      const { data, error } = await supabase.rpc('create_default_user_data', { new_user_id: userId });
+      
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      // Handle initialization error silently
+      throw error;
+    }
+  }
 
-	// Get user's muscle groups
-	static async getUserMuscleGroups(userId: string): Promise<UserMuscleGroup[]> {
-		try {
-			const { data, error } = await supabase
-				.from('user_muscle_groups')
-				.select('*')
-				.eq('user_id', userId)
-				.order('id', { ascending: true });
-			if (error) throw error;
-			return data || [];
-		} catch (error) {
-			return [];
-		}
-	}
+  // Get user's muscle groups
+  static async getUserMuscleGroups(userId: string): Promise<UserMuscleGroup[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_muscle_groups')
+        .select('*')
+        .eq('user_id', userId)
+        .order('id');
 
-	// Get user's exercises
-	static async getUserExercises(userId: string): Promise<UserExercise[]> {
-		try {
-			const { data, error } = await supabase
-				.from('user_exercises')
-				.select('*')
-				.eq('user_id', userId)
-				.order('id', { ascending: true });
-			if (error) throw error;
-			return data || [];
-		} catch (error) {
-			return [];
-		}
-	}
+      if (error) {
+        throw error;
+      }
 
-	// Get exercise groups for a user
-	static async getExerciseGroups(userId: string): Promise<ExerciseGroup[]> {
-		try {
-			const muscleGroups = await this.getUserMuscleGroups(userId);
-			const exercises = await this.getUserExercises(userId);
-			const exerciseGroups: ExerciseGroup[] = muscleGroups.map(muscleGroup => {
-				const groupExercises = exercises.filter(exercise => exercise.muscle_group_id === muscleGroup.id);
-				return {
-					muscle_group_id: muscleGroup.id,
-					muscle_group_name: muscleGroup.muscle_group_name,
-					exercises: groupExercises
-				};
-			});
-			return exerciseGroups;
-		} catch (error) {
-			return [];
-		}
-	}
+      return data || [];
+    } catch (error) {
+      // Handle fetch error silently
+      throw error;
+    }
+  }
 
-	// Get exercises for a specific muscle group
-	static async getExercisesByMuscleGroup(userId: string, muscleGroupId: number): Promise<UserExercise[]> {
-		try {
-			const { data, error } = await supabase
-				.from('user_exercises')
-				.select('*')
-				.eq('user_id', userId)
-				.eq('muscle_group_id', muscleGroupId)
-				.order('exercise_name');
-			if (error) throw error;
-			return data || [];
-		} catch (error) {
-			return [];
-		}
-	}
+  // Get user's exercises
+  static async getUserExercises(userId: string): Promise<UserExercise[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_exercises')
+        .select('*')
+        .eq('user_id', userId)
+        .order('id');
 
-	// Add a single workout set
-	static async addWorkoutSet(workoutSet: WorkoutSetFormData, userId: string, date: string): Promise<WorkoutSet> {
-		if (!userId) throw new Error('User ID is required');
-		if (!date) throw new Error('Date is required');
-		if (!workoutSet || typeof workoutSet !== 'object') throw new Error('Invalid workout set');
-		const formattedDate = new Date(date).toISOString().split('T')[0];
-		const { data, error } = await supabase
-			.from('workout_sets')
-			.insert({
-				user_id: userId,
-				date: formattedDate,
-				muscle_group_id: workoutSet.muscle_group_id,
-				exercise_id: workoutSet.exercise_id,
-				weight: workoutSet.weight,
-				number_of_reps: workoutSet.number_of_reps,
-				created_at: new Date().toISOString(),
-				modified_at: new Date().toISOString()
-			})
-			.select('*')
-			.single();
-		if (error) throw error;
-		return data as WorkoutSet;
-	}
+      if (error) {
+        throw error;
+      }
 
-	// Add multiple workout sets
-	static async addWorkoutSets(workoutSets: WorkoutSetFormData[], userId: string, date: string): Promise<WorkoutSet[]> {
-		if (!userId) throw new Error('User ID is required');
-		if (!date) throw new Error('Date is required');
-		if (!Array.isArray(workoutSets) || workoutSets.length === 0) throw new Error('No workout sets provided');
-		const formattedDate = new Date(date).toISOString().split('T')[0];
-		const results: WorkoutSet[] = [];
-		for (const workoutSet of workoutSets) {
-			const inserted = await this.addWorkoutSet(workoutSet, userId, formattedDate);
-			results.push(inserted);
-		}
-		return results;
-	}
+      return data || [];
+    } catch (error) {
+      // Handle fetch error silently
+      throw error;
+    }
+  }
 
-	// Get workout sets by date with names joined
-	static async getWorkoutSetsByDate(userId: string, date: string): Promise<WorkoutSetWithDetails[]> {
-		try {
-			const { data, error } = await supabase
-				.from('workout_sets')
-				.select(`
-					id, user_id, date, muscle_group_id, exercise_id, weight, number_of_reps, created_at, modified_at,
-					user_muscle_groups ( id, muscle_group_name ),
-					user_exercises ( id, exercise_name )
-				`)
-				.eq('user_id', userId)
-				.eq('date', date)
-				.order('created_at', { ascending: true });
-			if (error) throw error;
-			return (data || []).map((set: any) => ({
-				...set,
-				muscle_group_name: set.user_muscle_groups.muscle_group_name,
-				exercise_name: set.user_exercises.exercise_name
-			}));
-		} catch (error) {
-			return [];
-		}
-	}
+  // Get exercise groups for a user
+  static async getExerciseGroups(userId: string): Promise<any[]> {
+    try {
+      const muscleGroups = await this.getUserMuscleGroups(userId);
+      const exercises = await this.getUserExercises(userId);
 
-	// Update workout set
-	static async updateWorkoutSet(id: number, updates: Partial<WorkoutSet>): Promise<boolean> {
-		try {
-			const { error } = await supabase
-				.from('workout_sets')
-				.update({
-					...updates,
-					modified_at: new Date().toISOString()
-				})
-				.eq('id', id);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+      // Group exercises by muscle group
+      const exerciseGroups = muscleGroups.map(group => ({
+        muscle_group_id: group.id,
+        muscle_group_name: group.muscle_group_name,
+        exercises: exercises.filter(ex => ex.muscle_group_id === group.id)
+      }));
 
-	// Delete workout set
-	static async deleteWorkoutSet(id: number): Promise<boolean> {
-		try {
-			const { error } = await supabase
-				.from('workout_sets')
-				.delete()
-				.eq('id', id);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+      return exerciseGroups;
+    } catch (error) {
+      // Handle fetch error silently
+      throw error;
+    }
+  }
 
-	// Add new muscle group
-	static async addMuscleGroup(userId: string, muscleGroupName: string): Promise<UserMuscleGroup | null> {
-		try {
-			const { data, error } = await supabase
-				.from('user_muscle_groups')
-				.insert({ user_id: userId, muscle_group_name: muscleGroupName })
-				.select()
-				.single();
-			if (error) throw error;
-			return data;
-		} catch (error) {
-			return null;
-		}
-	}
+  // Get exercises for a specific muscle group
+  static async getExercisesByMuscleGroup(userId: string, muscleGroupId: number): Promise<UserExercise[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_exercises')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('muscle_group_id', muscleGroupId)
+        .order('id');
 
-	// Add new exercise
-	static async addExercise(userId: string, muscleGroupId: number, exerciseName: string): Promise<UserExercise | null> {
-		try {
-			const { data: muscleGroup, error: muscleGroupError } = await supabase
-				.from('user_muscle_groups')
-				.select('id')
-				.eq('id', muscleGroupId)
-				.eq('user_id', userId)
-				.single();
-			if (muscleGroupError || !muscleGroup) throw new Error('Invalid muscle group');
-			const { data, error } = await supabase
-				.from('user_exercises')
-				.insert({ user_id: userId, muscle_group_id: muscleGroupId, exercise_name: exerciseName })
-				.select()
-				.single();
-			if (error) throw error;
-			return data;
-		} catch (error) {
-			return null;
-		}
-	}
+      if (error) {
+        throw error;
+      }
 
-	// Delete muscle group
-	static async deleteMuscleGroup(userId: string, muscleGroupId: number): Promise<boolean> {
-		try {
-			await supabase.from('workout_sets').delete().eq('user_id', userId).eq('muscle_group_id', muscleGroupId);
-			await supabase.from('user_exercises').delete().eq('user_id', userId).eq('muscle_group_id', muscleGroupId);
-			const { error } = await supabase
-				.from('user_muscle_groups')
-				.delete()
-				.eq('user_id', userId)
-				.eq('id', muscleGroupId);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+      return data || [];
+    } catch (error) {
+      // Handle fetch error silently
+      throw error;
+    }
+  }
 
-	// Delete exercise
-	static async deleteExercise(userId: string, exerciseId: number): Promise<boolean> {
-		try {
-			await supabase.from('workout_sets').delete().eq('user_id', userId).eq('exercise_id', exerciseId);
-			const { error } = await supabase
-				.from('user_exercises')
-				.delete()
-				.eq('user_id', userId)
-				.eq('id', exerciseId);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+  // Add new workout set
+  static async addWorkoutSet(workoutSet: WorkoutSetFormData, userId: string, date: string): Promise<WorkoutSet> {
+    try {
+      // Validate required fields
+      if (!workoutSet.muscle_group_id || !workoutSet.exercise_id || !workoutSet.number_of_reps) {
+        throw new Error('Missing required fields');
+      }
 
-	// Update muscle group name
-	static async updateMuscleGroup(userId: string, muscleGroupId: number, newName: string): Promise<boolean> {
-		try {
-			const { error } = await supabase
-				.from('user_muscle_groups')
-				.update({ muscle_group_name: newName, modified_at: new Date().toISOString() })
-				.eq('id', muscleGroupId)
-				.eq('user_id', userId);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+      // Format date to YYYY-MM-DD
+      const formattedDate = new Date(date).toISOString().split('T')[0];
 
-	// Update exercise name
-	static async updateExercise(userId: string, exerciseId: number, newName: string): Promise<boolean> {
-		try {
-			const { error } = await supabase
-				.from('user_exercises')
-				.update({ exercise_name: newName, modified_at: new Date().toISOString() })
-				.eq('id', exerciseId)
-				.eq('user_id', userId);
-			if (error) throw error;
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .insert({
+          user_id: userId,
+          muscle_group_id: workoutSet.muscle_group_id,
+          exercise_id: workoutSet.exercise_id,
+          number_of_reps: workoutSet.number_of_reps,
+          weight: workoutSet.weight,
+          date: formattedDate
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle database error silently
+      throw error;
+    }
+  }
+
+  // Add multiple workout sets
+  static async addWorkoutSets(workoutSets: WorkoutSetFormData[], userId: string, date: string): Promise<WorkoutSet[]> {
+    try {
+      // Validate required fields for all sets
+      for (const set of workoutSets) {
+        if (!set.muscle_group_id || !set.exercise_id || !set.number_of_reps) {
+          throw new Error('Missing required fields in one or more workout sets');
+        }
+      }
+
+      // Format date to YYYY-MM-DD
+      const formattedDate = new Date(date).toISOString().split('T')[0];
+
+      const setsToInsert = workoutSets.map(set => ({
+        user_id: userId,
+        muscle_group_id: set.muscle_group_id,
+        exercise_id: set.exercise_id,
+        number_of_reps: set.number_of_reps,
+        weight: set.weight,
+        date: formattedDate
+      }));
+
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .insert(setsToInsert)
+        .select('*');
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      // Handle database error silently
+      throw error;
+    }
+  }
+
+  // Get workout sets for a specific date
+  static async getWorkoutSetsByDate(userId: string, date: string): Promise<WorkoutSetWithDetails[]> {
+    try {
+      const formattedDate = new Date(date).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .select(`
+          *,
+          user_muscle_groups!inner(muscle_group_name),
+          user_exercises!inner(exercise_name)
+        `)
+        .eq('user_id', userId)
+        .eq('date', formattedDate)
+        .order('created_at');
+
+      if (error) {
+        throw error;
+      }
+
+
+      // Map the joined data to match WorkoutSetWithDetails interface
+      const mappedData = (data || []).map(set => ({
+        ...set,
+        muscle_group_name: set.user_muscle_groups?.muscle_group_name || 'Unknown',
+        exercise_name: set.user_exercises?.exercise_name || 'Unknown'
+      }));
+
+      return mappedData;
+    } catch (error) {
+      // Handle fetch error silently
+      throw error;
+    }
+  }
+
+  // Update workout set
+  static async updateWorkoutSet(setId: number, updates: Partial<WorkoutSetFormData>, userId: string): Promise<WorkoutSet> {
+    try {
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .update(updates)
+        .eq('id', setId)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle update error silently
+      throw error;
+    }
+  }
+
+  // Delete workout set
+  static async deleteWorkoutSet(setId: number, userId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('workout_sets')
+        .delete()
+        .eq('id', setId)
+        .eq('user_id', userId);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      // Handle delete error silently
+      throw error;
+    }
+  }
+
+  // Add new muscle group
+  static async addMuscleGroup(userId: string, muscleGroupName: string): Promise<UserMuscleGroup> {
+    try {
+      const { data, error } = await supabase
+        .from('user_muscle_groups')
+        .insert({
+          user_id: userId,
+          muscle_group_name: muscleGroupName
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle add error silently
+      throw error;
+    }
+  }
+
+  // Add new exercise
+  static async addExercise(userId: string, muscleGroupId: number, exerciseName: string): Promise<UserExercise> {
+    try {
+      const { data, error } = await supabase
+        .from('user_exercises')
+        .insert({
+          user_id: userId,
+          muscle_group_id: muscleGroupId,
+          exercise_name: exerciseName
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle add error silently
+      throw error;
+    }
+  }
+
+  // Delete muscle group (and all associated exercises and workout sets)
+  static async deleteMuscleGroup(muscleGroupId: number, userId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('user_muscle_groups')
+        .delete()
+        .eq('id', muscleGroupId)
+        .eq('user_id', userId);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      // Handle delete error silently
+      throw error;
+    }
+  }
+
+  // Delete exercise (and all associated workout sets)
+  static async deleteExercise(exerciseId: number, userId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('user_exercises')
+        .delete()
+        .eq('id', exerciseId)
+        .eq('user_id', userId);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      // Handle delete error silently
+      throw error;
+    }
+  }
+
+  // Update muscle group name
+  static async updateMuscleGroup(muscleGroupId: number, updates: Partial<UserMuscleGroup>, userId: string): Promise<UserMuscleGroup> {
+    try {
+      const { data, error } = await supabase
+        .from('user_muscle_groups')
+        .update(updates)
+        .eq('id', muscleGroupId)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle update error silently
+      throw error;
+    }
+  }
+
+  // Update exercise name
+  static async updateExercise(exerciseId: number, updates: Partial<UserExercise>, userId: string): Promise<UserExercise> {
+    try {
+      const { data, error } = await supabase
+        .from('user_exercises')
+        .update(updates)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      // Handle update error silently
+      throw error;
+    }
+  }
 } 

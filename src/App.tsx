@@ -23,93 +23,78 @@ const App = () => {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        console.log('🔍 Starting auth callback check...');
-        console.log('📍 Current URL:', window.location.href);
-        console.log('🔗 URL search params:', window.location.search);
-        console.log('📝 URL hash:', window.location.hash);
+        setIsLoading(true);
         
-        // Check for OAuth callback parameters
+        // Check if this is an OAuth callback
         const urlParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         
-        console.log('🔑 URL search parameters:', Object.fromEntries(urlParams.entries()));
-        console.log('🔑 Hash parameters:', Object.fromEntries(hashParams.entries()));
-        
-        // Check if we have OAuth callback parameters
-        const hasOAuthParams = urlParams.has('code') || urlParams.has('error') || 
-                              hashParams.has('access_token') || hashParams.has('error');
-        
-        if (hasOAuthParams) {
-          console.log('🎯 OAuth callback detected, attempting manual exchange...');
+        // Check for OAuth callback parameters
+        if (urlParams.has('code') || hashParams.has('access_token') || hashParams.has('code')) {
+          // OAuth callback detected, attempt manual exchange
+          const { data, error: exchangeError } = await supabase.auth.getSession();
           
-          try {
-            // Try to manually exchange the OAuth code
-            const { data, error: exchangeError } = await supabase.auth.getSession();
-            console.log('🔄 Manual exchange result:', { data, error: exchangeError });
-          } catch (exchangeError) {
-            console.error('💥 Manual exchange failed:', exchangeError);
+          if (exchangeError) {
+            // Handle exchange error silently
           }
         }
         
-        // Check if we're in an OAuth callback
+        // Check current session
         const { data: { session }, error } = await supabase.auth.getSession();
         
-        console.log('📋 Session check result:', { session, error });
-        
         if (error) {
-          console.error('❌ Auth error:', error);
-          setAuthError(error.message);
-        } else if (session?.user) {
-          console.log('✅ User authenticated via OAuth:', session.user);
+          // Handle auth error silently
+        }
+        
+        if (session?.user) {
           // User is authenticated via OAuth
           const userData = {
-            email: session.user.email || '',
-            name: session.user.user_metadata.full_name || session.user.email || '',
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name || session.user.email
           };
-          console.log('👤 Setting user data:', userData);
+          
           setUser(userData);
           localStorage.setItem('user', JSON.stringify(userData));
         } else {
-          console.log('ℹ️ No active session, checking localStorage...');
-          // Check for saved user in localStorage
+          // No active session, check localStorage
           const savedUser = localStorage.getItem('user');
           if (savedUser) {
-            console.log('💾 Found saved user:', savedUser);
-            setUser(JSON.parse(savedUser));
-          } else {
-            console.log('📭 No saved user found');
+            try {
+              const userData = JSON.parse(savedUser);
+              setUser(userData);
+            } catch (parseError) {
+              // Handle parse error silently
+            }
           }
         }
       } catch (error) {
-        console.error('💥 Auth callback error:', error);
+        // Handle auth callback error silently
       } finally {
         setIsLoading(false);
       }
     };
-
+    
     handleAuthCallback();
   }, []);
 
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state change:', event, session);
-      if (session?.user) {
-        setUser({
-          email: session.user.email || '',
-          name: session.user.user_metadata.full_name || session.user.email || '',
-        });
-        localStorage.setItem('user', JSON.stringify({
-          email: session.user.email || '',
-          name: session.user.user_metadata.full_name || session.user.email || '',
-        }));
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userData = {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.full_name || session.user.email
+        };
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         localStorage.removeItem('user');
       }
     });
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleAuth = (userData: { email: string; name: string }) => {

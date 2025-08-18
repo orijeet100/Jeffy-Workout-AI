@@ -57,7 +57,7 @@ const ManualWorkoutForm: React.FC<ManualWorkoutFormProps> = ({
           }]);
         }
       } catch (error) {
-        console.error('Error loading exercise library:', error);
+        // Handle load error silently
         toast({
           title: 'Error',
           description: 'Failed to load exercise library',
@@ -122,7 +122,7 @@ const ManualWorkoutForm: React.FC<ManualWorkoutFormProps> = ({
       if (validSets.length === 0) {
         toast({
           title: 'Validation Error',
-          description: 'Please fill in at least one complete set',
+          description: 'Please fill in all required fields for at least one set',
           variant: 'destructive'
         });
         return;
@@ -138,7 +138,7 @@ const ManualWorkoutForm: React.FC<ManualWorkoutFormProps> = ({
       });
       
     } catch (error) {
-      console.error('Error saving workout sets:', error);
+      // Handle save error silently
       toast({
         title: 'Error',
         description: 'Failed to save workout sets',
