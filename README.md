@@ -20,7 +20,7 @@
 
 ## 🚀 **Try Jeffy AI Now - It's Free and still in prototyping phase!**
 
-**[🌐 Visit Website](https://jeffy-ai.netlify.app)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
+**[🌐 Visit Website](https://idyllic-alfajores-127002.netlify.app/)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
 
 *Experience the future of workout tracking with AI-powered voice recognition*
 
