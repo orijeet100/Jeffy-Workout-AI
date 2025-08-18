@@ -61,11 +61,20 @@ const Auth = ({ onAuth, showAuthError }: AuthProps) => {
   };
 
   const handleGoogleAuth = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-    if (error) {
-      alert('Google sign-in failed: ' + error.message);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ 
+        provider: 'google'
+      });
+      
+      if (error) {
+        console.error('Google OAuth error:', error);
+        setError('Google sign-in failed: ' + error.message);
+      }
+      // The redirect will happen automatically on success
+    } catch (error) {
+      console.error('Google OAuth exception:', error);
+      setError('Google sign-in failed. Please try again.');
     }
-    // The redirect will happen automatically on success
   };
 
   return (
