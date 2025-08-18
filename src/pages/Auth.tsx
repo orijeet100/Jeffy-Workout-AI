@@ -66,13 +66,11 @@ const Auth = ({ onAuth, showAuthError }: AuthProps) => {
         provider: 'google'
       });
       
-      if (error) {
-        console.error('Google OAuth error:', error);
+    if (error) {
         setError('Google sign-in failed: ' + error.message);
-      }
-      // The redirect will happen automatically on success
+    }
+    // The redirect will happen automatically on success
     } catch (error) {
-      console.error('Google OAuth exception:', error);
       setError('Google sign-in failed. Please try again.');
     }
   };

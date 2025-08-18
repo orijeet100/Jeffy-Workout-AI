@@ -39,7 +39,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Audio recording refs
@@ -50,13 +49,9 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
   useEffect(() => {
     const loadExerciseLibrary = async () => {
       try {
-        console.log('🔄 Loading exercise library for user:', userId);
-        
         const groups = await DatabaseService.getExerciseGroups(userId);
-        console.log('📚 Raw exercise groups from database:', groups);
         
         if (!groups || groups.length === 0) {
-          console.warn('⚠️ No exercise groups found for user. This might indicate a setup issue.');
           toast({
             title: 'Warning',
             description: 'No exercise library found. Please check your exercise setup.',
@@ -66,19 +61,11 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
         }
         
         setExerciseGroups(groups);
-        console.log('✅ Exercise groups loaded successfully:', groups.length, 'groups');
         
         // Create initial dummy set only if this is the first instance
         if (groups.length > 0 && groups[0].exercises.length > 0) {
           const firstGroup = groups[0];
           const firstExercise = firstGroup.exercises[0];
-          
-          console.log('🎯 Creating dummy set with:', {
-            muscle_group_id: firstGroup.muscle_group_id,
-            muscle_group_name: firstGroup.muscle_group_name,
-            exercise_id: firstExercise.id,
-            exercise_name: firstExercise.exercise_name
-          });
           
           setWorkoutSets([{
             muscle_group_id: firstGroup.muscle_group_id,
@@ -86,12 +73,9 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
             weight: 0,
             number_of_reps: 10
           }]);
-        } else {
-          console.warn('⚠️ First muscle group has no exercises');
         }
         
       } catch (error) {
-        console.error('❌ Error loading exercise library:', error);
         toast({
           title: 'Error',
           description: 'Failed to load exercise library',
@@ -102,46 +86,42 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
 
     if (userId) {
       loadExerciseLibrary();
-    } else {
-      console.warn('⚠️ No userId provided, cannot load exercise library');
     }
   }, [userId]);
 
-  // Timer for recording
+  // Initialize workout sets with dummy data
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isRecording) {
-      interval = setInterval(() => {
-        setRecordingTime(prev => {
-          if (prev >= 180) { // 3 minutes max
-            handleStopRecording();
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    } else {
-      setRecordingTime(0);
+    if (exerciseGroups.length > 0 && exerciseGroups[0].exercises.length > 0) {
+      const firstGroup = exerciseGroups[0];
+      const firstExercise = firstGroup.exercises[0];
+      
+      setWorkoutSets([{
+        muscle_group_id: firstGroup.muscle_group_id,
+        exercise_id: firstExercise.id,
+        weight: 0,
+        number_of_reps: 10
+      }]);
     }
-    return () => clearInterval(interval);
-  }, [isRecording]);
+  }, [exerciseGroups]);
 
   // Voice Recording Functions
-  const handleStartRecording = async () => {
+  const startRecording = async () => {
     try {
       setErrorMessage('');
       setTranscript('');
-      audioChunksRef.current = [];
-
-      // Get microphone access
+      
+      // Get microphone access (simplified like the working version)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // Create MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      // Clear previous audio chunks
+      audioChunksRef.current = [];
       
+      // Create MediaRecorder (simplified like the working version)
+      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
+      
+      // Ensure we use the correct MIME type for the blob
+      const mimeType = mediaRecorder.mimeType || 'audio/webm';
       
       // Handle data available
       mediaRecorder.ondataavailable = (event) => {
@@ -150,39 +130,59 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
         }
       };
       
-      // Handle recording stop
+      // Handle recording stop (adapted from working version)
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await processAudioWithDeepgram(audioBlob);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        if (audioChunksRef.current.length === 0) {
+          setErrorMessage('No audio data recorded. Please try again.');
+          return;
+        }
+        
+        if (audioBlob.size < 1000) {
+          setErrorMessage('Recording too short. Please speak for at least 2-3 seconds.');
+          return;
+        }
         
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
+        
+        // Process audio with Deepgram
+        await processAudioWithDeepgram(audioBlob, mimeType);
       };
       
       // Start recording
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // Collect data every second
       setIsRecording(true);
       
+      // Show recording started notification
+      toast({
+        title: "Recording Started",
+        description: "Speak clearly about your workout. Click the red button to stop.",
+      });
+      
     } catch (error) {
-      console.error('Error starting recording:', error);
       setErrorMessage('Failed to access microphone. Please check permissions.');
     }
   };
 
   const handleStopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      
       setIsRecording(false);
     }
   };
 
-  const processAudioWithDeepgram = async (audioBlob: Blob) => {
+  const processAudioWithDeepgram = async (audioBlob: Blob, mimeType: string) => {
     try {
       setIsProcessing(true);
       setErrorMessage('');
       
       // Call Deepgram API
-      const deepgramResponse = await transcribeAudio(audioBlob);
+      const deepgramResponse = await transcribeAudio(audioBlob, mimeType);
       
       const transcriptText = deepgramResponse.transcript;
       
@@ -217,7 +217,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       const validation = validateOpenAIResponse(extractedSets, createExerciseContext());
       
       if (!validation.isValid) {
-        console.warn('⚠️ OpenAI response validation failed:', validation.errors);
         setErrorMessage(`Voice input processed but some sets had issues: ${validation.errors.join(', ')}`);
         
         // Only keep valid sets
@@ -239,7 +238,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       });
       
     } catch (error) {
-      console.error('Error processing audio:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to process audio');
     } finally {
       setIsProcessing(false);
@@ -251,21 +249,11 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       // Create exercise context for OpenAI
       const exerciseContext = createExerciseContext();
       
-      // Log the context and transcript for debugging
-      console.log('🎯 VOICE INPUT DEBUG INFO:');
-      console.log('📝 Transcript:', transcriptText);
-      console.log('📚 Exercise Context:', exerciseContext);
-      console.log('🔍 Available Muscle Groups:', exerciseGroups.map(g => ({
-        id: g.muscle_group_id,
-        name: g.muscle_group_name,
-        exercises: g.exercises.map(e => ({ id: e.id, name: e.exercise_name }))
-      })));
       
       // Call OpenAI API
       const openaiResponse = await parseWorkoutWithOpenAI(transcriptText, exerciseContext);
       
-      // Log the OpenAI response for debugging
-      console.log('🤖 OpenAI Response:', openaiResponse);
+
       
       if (openaiResponse.error) {
         return openaiResponse;
@@ -278,7 +266,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       return openaiResponse;
       
     } catch (error) {
-      console.error('Error processing with OpenAI:', error);
       // Fallback to simple processing if OpenAI fails
       const fallbackSets = await simpleVoiceProcessing(transcriptText, createExerciseContext());
       return { workoutSets: fallbackSets };
@@ -290,15 +277,13 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
     
     // Validate that we have user-specific exercise data
     if (!exerciseGroups || exerciseGroups.length === 0) {
-      console.error('❌ No exercise groups found for user!');
       return context;
     }
     
-    console.log('🔍 Creating exercise context for user with:', exerciseGroups.length, 'muscle groups');
+    
     
     exerciseGroups.forEach(group => {
       if (!group.muscle_group_id || !group.muscle_group_name || !group.exercises) {
-        console.warn('⚠️ Invalid muscle group data:', group);
         return;
       }
       
@@ -306,7 +291,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       const exercises = group.exercises.filter(ex => ex.id && ex.exercise_name);
       
       if (exercises.length === 0) {
-        console.warn('⚠️ No valid exercises found for muscle group:', group.muscle_group_name);
         return;
       }
       
@@ -319,20 +303,19 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
         }))
       };
       
-      console.log(`✅ Added muscle group: ${group.muscle_group_name} (ID: ${group.muscle_group_id}) with ${exercises.length} exercises`);
+      
     });
     
-    // Log the final context structure
-    console.log('📚 Final Exercise Context Structure:', context);
+    
     
     // Validate context has data
     const muscleGroupCount = Object.keys(context).length;
     const totalExercises = Object.values(context).reduce((sum: number, group: any) => sum + group.exercises.length, 0);
     
-    console.log(`📊 Context Summary: ${muscleGroupCount} muscle groups, ${totalExercises} total exercises`);
+    
     
     if (muscleGroupCount === 0) {
-      console.error('❌ No valid exercise context created! This will cause OpenAI to fail.');
+      return context;
     }
     
     return context;
@@ -533,7 +516,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
         // Check if muscle_group_id exists
         const validMuscleGroup = exerciseGroups.some(g => g.muscle_group_id === set.muscle_group_id);
         if (!validMuscleGroup) {
-          console.warn('Invalid muscle_group_id:', set.muscle_group_id);
           return false;
         }
         
@@ -541,7 +523,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
         const muscleGroup = exerciseGroups.find(g => g.muscle_group_id === set.muscle_group_id);
         const validExercise = muscleGroup?.exercises.some(e => e.id === set.exercise_id);
         if (!validExercise) {
-          console.warn('Invalid exercise_id:', set.exercise_id, 'for muscle_group_id:', set.muscle_group_id);
           return false;
         }
         
@@ -577,7 +558,6 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
       });
       
     } catch (error) {
-      console.error('Error saving workout sets:', error);
       toast({
         title: 'Error',
         description: 'Failed to save workout sets',
@@ -612,11 +592,11 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
               
               <div className="flex items-center justify-center gap-4 mb-3">
                 <Button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
+                  onClick={isRecording ? handleStopRecording : startRecording}
                   disabled={isProcessing}
                   className={`w-16 h-16 rounded-full ${
                     isRecording 
-                      ? 'bg-red-500 hover:bg-red-600' 
+                      ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
                       : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
                   } text-white shadow-lg hover:shadow-xl transition-all duration-300`}
                 >
@@ -628,8 +608,8 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
                 </Button>
                 
                 {isRecording && (
-                  <div className="text-sm font-medium text-purple-600">
-                    Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                  <div className="text-sm font-medium text-red-600 animate-pulse">
+                    Recording...
                   </div>
                 )}
                 
@@ -641,9 +621,25 @@ const AddSetsModal: React.FC<AddSetsModalProps> = ({
                 )}
               </div>
               
+              <div className="text-xs text-gray-600 mb-2">
+                {isRecording 
+                  ? 'Click the red button to stop recording' 
+                  : 'Click the microphone to start recording your workout'
+                }
+              </div>
+              
+              <div className="text-xs text-gray-500 text-center">
+                💡 Say something like: "3 sets of bench press, 135 pounds, 10 reps"
+              </div>
+              
               {errorMessage && (
-                <div className="text-red-600 text-xs mb-2">
-                  {errorMessage}
+                <div className="text-red-600 text-xs mb-2 bg-red-50 px-3 py-2 rounded border border-red-200">
+                  <div className="font-medium">⚠️ {errorMessage}</div>
+                  {errorMessage.includes('No speech detected') && (
+                    <div className="mt-1 text-red-500">
+                      Try speaking louder, closer to the microphone, or for longer duration
+                    </div>
+                  )}
                 </div>
               )}
               

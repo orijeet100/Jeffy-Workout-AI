@@ -42,7 +42,6 @@ const WorkoutSetForm: React.FC<WorkoutSetFormProps> = ({
         setMuscleGroups(muscleGroupsData);
         setExercises(exercisesData);
       } catch (error) {
-        console.error('Error loading exercise data:', error);
         toast({ 
           title: 'Error', 
           description: 'Failed to load exercise data', 
@@ -116,7 +115,6 @@ const WorkoutSetForm: React.FC<WorkoutSetFormProps> = ({
       await onSave(validSets);
       onClose();
     } catch (error) {
-      console.error('Error saving workout sets:', error);
       toast({ 
         title: 'Error', 
         description: 'Failed to save workout sets', 

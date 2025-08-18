@@ -35,70 +35,76 @@ const Dashboard = () => {
       
       // Initialize user data if this is a new user
       if (userId) {
-        initializeUserIfNeeded();
+        initializeUserIfNeeded(userId);
       }
     });
   }, []);
 
   // Initialize user with default data if needed
-  const initializeUserIfNeeded = async () => {
-    if (!userId) return;
-    
+  const initializeUserIfNeeded = async (userId: string) => {
     try {
       const muscleGroups = await DatabaseService.getUserMuscleGroups(userId);
       if (muscleGroups.length === 0) {
         await DatabaseService.initializeUserData(userId);
-        toast({ title: 'Welcome!', description: 'Default exercises have been set up for you.' });
+        toast({ 
+          title: 'Welcome!', 
+          description: 'Default exercises have been added to your library.' 
+        });
       }
     } catch (error) {
-      toast({ 
-        title: 'Error', 
-        description: 'Failed to initialize user data', 
-        variant: 'destructive' 
-      });
+      // Handle initialization error silently
     }
   };
 
   // Fetch workout sets when date or user changes
   useEffect(() => {
     if (userId && selectedDate) {
-      fetchWorkoutSets();
+      loadWorkoutSets();
     }
   }, [userId, selectedDate]);
 
   // Fetch workout sets for the selected date
-  const fetchWorkoutSets = async () => {
-    if (!userId || !selectedDate) return;
+  const loadWorkoutSets = async () => {
+    if (!userId) return;
     
     setIsLoading(true);
     try {
-      const dateString = selectedDate.toISOString().split('T')[0];
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
       const sets = await DatabaseService.getWorkoutSetsByDate(userId, dateString);
+      console.log('🔍 Debug: Workout sets loaded:', sets);
       setWorkoutSets(sets);
     } catch (error) {
-      toast({ 
-        title: 'Error', 
-        description: 'Failed to fetch workout data', 
-        variant: 'destructive' 
-      });
+      // Handle fetch error silently
     } finally {
       setIsLoading(false);
     }
   };
 
   // Add new workout sets
-  const handleAddWorkoutSets = async (sets: WorkoutSetFormData[], userId: string, dateString: string) => {
+  const handleAddWorkoutSets = async (sets: WorkoutSetFormData[]) => {
+    if (!userId) return;
+
     try {
-      const success = await DatabaseService.addWorkoutSets(userId, dateString, sets);
-      if (success) {
-        toast({ title: 'Success!', description: 'Workout sets added successfully.' });
-        setShowAddSetsModal(false);
-        await fetchWorkoutSets();
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      
+      
+      // Use the more efficient addWorkoutSets function for multiple sets
+      const addedSets = await DatabaseService.addWorkoutSets(sets, userId, dateString);
+
+      if (addedSets.length > 0) {
+        toast({ 
+          title: 'Success!', 
+          description: `${addedSets.length} set(s) have been saved.` 
+        });
+        
+        // Refresh the workout sets
+        await loadWorkoutSets();
       }
     } catch (error) {
+      // Handle add error silently
       toast({ 
         title: 'Error', 
-        description: 'Failed to add workout sets', 
+        description: 'Failed to save workout sets', 
         variant: 'destructive' 
       });
     }
@@ -117,18 +123,17 @@ const Dashboard = () => {
     if (!editingSet) return;
     
     try {
-      const success = await DatabaseService.updateWorkoutSet(editingSet.id, {
+      await DatabaseService.updateWorkoutSet(editingSet.id, {
         weight: editWeight,
         number_of_reps: editReps
-      });
+      }, userId);
       
-      if (success) {
-        toast({ title: 'Updated!', description: 'Your changes have been saved.' });
-        setShowEditModal(false);
-        setEditingSet(null);
-        await fetchWorkoutSets();
-      }
+      toast({ title: 'Updated!', description: 'Your changes have been saved.' });
+      setShowEditModal(false);
+      setEditingSet(null);
+      await loadWorkoutSets();
     } catch (error) {
+      // Handle update error silently
       toast({ 
         title: 'Error', 
         description: 'Failed to update workout set', 
@@ -140,12 +145,11 @@ const Dashboard = () => {
   // Delete workout set
   const handleDeleteWorkoutSet = async (id: number) => {
     try {
-      const success = await DatabaseService.deleteWorkoutSet(id);
-      if (success) {
-        toast({ title: 'Deleted', description: 'Set has been removed.' });
-        await fetchWorkoutSets();
-      }
+      await DatabaseService.deleteWorkoutSet(id, userId);
+      toast({ title: 'Deleted', description: 'Set has been removed.' });
+      await loadWorkoutSets();
     } catch (error) {
+      // Handle delete error silently
       toast({ 
         title: 'Error', 
         description: 'Failed to delete workout set', 
@@ -156,11 +160,21 @@ const Dashboard = () => {
 
   // Group workout sets by muscle group and exercise
   const groupedWorkoutSets = React.useMemo(() => {
+    console.log('🔍 Debug: Grouping workout sets:', workoutSets);
+    
     const groups: Record<string, Record<string, WorkoutSetWithDetails[]>> = {};
     
     workoutSets.forEach(set => {
-      const muscleGroup = set.muscle_group_name;
-      const exercise = set.exercise_name;
+      const muscleGroup = set.muscle_group_name || 'Unknown';
+      const exercise = set.exercise_name || 'Unknown';
+      
+      console.log('🔍 Debug: Processing set:', { 
+        id: set.id, 
+        muscleGroup, 
+        exercise, 
+        muscle_group_name: set.muscle_group_name,
+        exercise_name: set.exercise_name 
+      });
       
       if (!groups[muscleGroup]) {
         groups[muscleGroup] = {};
@@ -179,6 +193,7 @@ const Dashboard = () => {
       });
     });
 
+    console.log('🔍 Debug: Final grouped result:', groups);
     return groups;
   }, [workoutSets]);
 
@@ -312,8 +327,8 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
+          ))}
+        </div>
         ))
       )}
 
