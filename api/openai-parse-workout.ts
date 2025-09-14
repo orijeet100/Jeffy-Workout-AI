@@ -19,7 +19,7 @@ export async function parseWorkoutWithOpenAI(transcript: string, exerciseContext
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -109,19 +109,21 @@ RULES:
 6. If reps are not specified, use 10 as default
 7. If number of sets is not mentioned, assume 1 set
 8. CRITICAL: Ensure all muscle_group_id and exercise_id values exist in the context
+9. If user says entries for multiple sets, create separate entries for each set
 
 DEFAULTS:
 - Weight: 0 lbs (if not mentioned)
 - Reps: 10 (if not mentioned)
 - Sets: 1 (if not mentioned)
 
-EXAMPLE:
-Voice: "I did 3 sets of bench press, 185 pounds, 8 reps each"
+EXAMPLE ( The ids down are just examples, you need to use the ids from the context):
+Voice: "I did 2 sets of bench press, 185 pounds, 8 reps and 3 sets of dumbbell flyes, 10 pounds, 10 reps"
 Output: {
   "workoutSets": [
     {"muscle_group_id": 1, "exercise_id": 1, "weight": 185, "number_of_reps": 8},
     {"muscle_group_id": 1, "exercise_id": 1, "weight": 185, "number_of_reps": 8},
-    {"muscle_group_id": 1, "exercise_id": 1, "weight": 185, "number_of_reps": 8}
+    {"muscle_group_id": 1, "exercise_id": 2, "weight": 10, "number_of_reps": 10},
+    {"muscle_group_id": 1, "exercise_id": 2, "weight": 10, "number_of_reps": 10}
   ]
 }
 
