@@ -22,7 +22,7 @@
 
 **[🌐 Visit Website](https://idyllic-alfajores-127002.netlify.app/)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
 
-*Experience the future of workout tracking with AI-powered voice recognition*
+*Experience the future of workout tracking with AI powered voice recognition*
 
 </div>
 
