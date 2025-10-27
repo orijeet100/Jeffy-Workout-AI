@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/yourusername/jeffy-ai/main/public/logo.png" alt="Jeffy AI Logo" width="250" height="250">
+<img src="public/logo.png" alt="Jeffy AI Logo" width="250" height="250">
 
 **Transform your workout tracking with AI-powered voice recognition and intelligent exercise management**
 
