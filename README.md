@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Jeffy AI Logo](public/logo.png =250x250)
+<img src="public/logo.png" alt="Jeffy AI Logo" width="250" height="250">
 
 **Transform your workout tracking with AI-powered voice recognition and intelligent exercise management**
 
@@ -144,6 +144,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by Orijeet Mukherjee**
 
-[Live Demo](https://jeffy-ai.netlify.app) • [Report Bug](https://github.com/yourusername/jeffy-ai/issues) • [Request Feature](https://github.com/yourusername/jeffy-ai/issues)
+[Live Demo](https://jeffy-ai.netlify.app/) • [Report Bug](https://github.com/yourusername/jeffy-ai/issues) • [Request Feature](https://github.com/yourusername/jeffy-ai/issues)
 
 </div>

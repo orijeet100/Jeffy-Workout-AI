@@ -71,7 +71,6 @@ const Dashboard = () => {
     try {
       const dateString = format(selectedDate, 'yyyy-MM-dd');
       const sets = await DatabaseService.getWorkoutSetsByDate(userId, dateString);
-      console.log('🔍 Debug: Workout sets loaded:', sets);
       setWorkoutSets(sets);
     } catch (error) {
       // Handle fetch error silently
@@ -160,7 +159,6 @@ const Dashboard = () => {
 
   // Group workout sets by muscle group and exercise
   const groupedWorkoutSets = React.useMemo(() => {
-    console.log('🔍 Debug: Grouping workout sets:', workoutSets);
     
     const groups: Record<string, Record<string, WorkoutSetWithDetails[]>> = {};
     
@@ -168,13 +166,6 @@ const Dashboard = () => {
       const muscleGroup = set.muscle_group_name || 'Unknown';
       const exercise = set.exercise_name || 'Unknown';
       
-      console.log('🔍 Debug: Processing set:', { 
-        id: set.id, 
-        muscleGroup, 
-        exercise, 
-        muscle_group_name: set.muscle_group_name,
-        exercise_name: set.exercise_name 
-      });
       
       if (!groups[muscleGroup]) {
         groups[muscleGroup] = {};
@@ -193,7 +184,6 @@ const Dashboard = () => {
       });
     });
 
-    console.log('🔍 Debug: Final grouped result:', groups);
     return groups;
   }, [workoutSets]);
 
