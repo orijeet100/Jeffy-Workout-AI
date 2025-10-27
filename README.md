@@ -20,7 +20,7 @@
 
 ## 🚀 **Try Jeffy AI Now - It's Free and still in prototyping phase!**
 
-**[🌐 Visit Website](https://idyllic-alfajores-127002.netlify.app/)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
+**[🌐 Visit Website](https://jeffy-ai.netlify.app/)** • **[👨‍💻 Creator Portfolio](https://orijeet100.github.io/orijeet_portfolio/)**
 
 *Experience the future of workout tracking with AI-powered voice recognition*
 
@@ -144,6 +144,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by Orijeet Mukherjee**
 
-[Live Demo](https://jeffy-ai.netlify.app) • [Report Bug](https://github.com/yourusername/jeffy-ai/issues) • [Request Feature](https://github.com/yourusername/jeffy-ai/issues)
+[Live Demo](https://jeffy-ai.netlify.app/) • [Report Bug](https://github.com/yourusername/jeffy-ai/issues) • [Request Feature](https://github.com/yourusername/jeffy-ai/issues)
 
 </div>
